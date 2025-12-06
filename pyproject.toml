@@ -1,5 +1,5 @@
 [build-system]
-requires = ["uv-build >= 0.7.19, <0.9.0", "setuptools>=61"]
+requires = ["uv_build >= 0.9.11, <0.10.0"]
 build-backend = "uv_build"
 
 
@@ -16,12 +16,9 @@ requires-python = ">=3.13"
 dependencies = [
     "plotly>=6.3.0",
     "polars>=1.32.3",
-    "setuptools>=80.9.0",
     "streamlit>=1.51.0",
-    "uv-build>=0.8.14",
+    "uv>=0.9.16",
 ]
-
-[dependency-groups]
 
 dev = [
     "mypy>=1.17.1",
@@ -43,6 +40,12 @@ dev = [
 data_preparation = "meteoshrooms.data_preparation.data_preparation.py"
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[[tool.uv.index]]
+name = "testpypi"
+url = "https://test.pypi.org/simple/"
+publish-url = "https://test.pypi.org/legacy/"
+explicit = true
 
 [tool.ruff]
 # Exclude a variety of commonly ignored directories.
@@ -164,6 +167,12 @@ packages = ['meteoshrooms']
 warn_unused_configs = true
 warn_redundant_casts = true
 warn_unused_ignores = true
+strict_equality = true
+check_untyped_defs = true
+disallow_untyped_calls = true
+disallow_incomplete_defs = true
+disallow_untyped_defs = true
+
 
 [tool.pytest.ini_options]
 markers = [
@@ -208,3 +217,8 @@ fail_under = 10
 
 [tool.coverage.html]
 directory = "tests/coverage_html_report"
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.5.0",
+]
