@@ -116,7 +116,7 @@ def generate_download_urls(
 
 def check_generate_download_urls_arguments_or_raise_error(
     station_type: str, timeframe: str
-):
+) -> None:
     if timeframe not in TIMEFRAME_STRINGS:
         raise ValueError(TIMEFRAME_VALUE_ERROR_STRING)
     if not isinstance(station_type, str):

@@ -3,7 +3,7 @@ import logging
 from meteoshrooms.dashboard import settings
 
 
-def init_logging(name):
+def init_logging(name: str) -> None:
     root_logger = logging.getLogger(name)
     if root_logger.handlers:  # logger is already setup, don't setup again
         return
