@@ -1,7 +1,6 @@
 name: "Publish"
 
 on: push
-
 jobs:
   python-setup:
     runs-on: ubuntu-latest
