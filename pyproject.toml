@@ -7,6 +7,11 @@ build-backend = "uv_build"
 name = "MeteoShrooms"
 version = "0.2.0"
 description = "Dashboard with Key Mushroom Metrics (KMM)"
+authors = [{ name = "Peter Zweifel" }]
+keywords = ["Fungi", "Mushrooms", "Dashboard", "Meteo", "Metrics"]
+#license = "CC-BY-NC-SA-4.0"
+#readme = "README.adoc"
+license-files = []
 requires-python = ">=3.13"
 dependencies = [
     "plotly>=6.3.0",
@@ -34,7 +39,8 @@ dev = [
     "types-toml>=0.10.8.20240310",
     "uv>=0.8.13",
 ]
-
+[scripts]
+data_preparation = "meteoshrooms.data_preparation.data_preparation.py"
 [tool.setuptools.packages.find]
 where = ["src"]
 
