@@ -19,8 +19,8 @@ jobs:
       #        with:
       #          enable-cache: true
       #          cache-dependency-glob: "uv.lock"
-      - name: "Convert Readme to Markdown"
-        run: uvx --from Pydowndoc-bin -- downdoc README.adoc
+      #      - name: "Convert Readme to Markdown"
+      #        run: uvx --from Pydowndoc-bin -- downdoc README.adoc
       - name: "Build"
         run: uv build
       - name: "Publish"
