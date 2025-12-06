@@ -10,7 +10,7 @@ description = "Dashboard with Key Mushroom Metrics (KMM)"
 authors = [{ name = "Peter Zweifel" }]
 keywords = ["Fungi", "Mushrooms", "Dashboard", "Meteo", "Metrics"]
 #license = "CC-BY-NC-SA-4.0"
-#readme = "README.adoc"
+readme = "README.md"
 license-files = []
 requires-python = ">=3.13"
 dependencies = [
