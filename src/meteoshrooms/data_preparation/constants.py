@@ -135,21 +135,18 @@ TIMEFRAME_STRINGS: set[str] = {'recent', 'now'}
 ARGS_LOAD_META_PARAMETERS: tuple[
     dict[str, list[str]], dict[str, type[DataType]], tuple[str, ...]
 ] = (
-    META_FILE_PATH_DICT,
     SCHEMA_META_PARAMETERS,
     COLS_TO_KEEP_META_PARAMETERS,
 )
 ARGS_LOAD_META_STATIONS: tuple[
     dict[str, list[str]], dict[str, type[DataType]], tuple[str, ...]
 ] = (
-    META_FILE_PATH_DICT,
     SCHEMA_META_STATIONS,
     COLS_TO_KEEP_META_STATIONS,
 )
 ARGS_LOAD_META_DATAINVENTORY: tuple[
     dict[str, list[str]], dict[str, type[DataType]], tuple[str, ...]
 ] = (
-    META_FILE_PATH_DICT,
     SCHEMA_META_DATAINVENTORY,
     COLS_TO_KEEP_META_DATAINVENTORY,
 )

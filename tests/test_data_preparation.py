@@ -7,29 +7,26 @@ import polars.selectors as cs
 import pytest
 from polars.testing import assert_frame_equal
 
-from meteoshrooms.data_preparation.constants import (
-    COLS_TO_KEEP_META_DATAINVENTORY,
-    COLS_TO_KEEP_META_PARAMETERS,
-    COLS_TO_KEEP_META_STATIONS,
-    SCHEMA_META_DATAINVENTORY,
-    SCHEMA_META_PARAMETERS,
-    SCHEMA_META_STATIONS,
-)
-from meteoshrooms.data_preparation.data_preparation import load_metadata
+from meteoshrooms.data_preparation import data_preparation
+from meteoshrooms.data_preparation.data_preparation import DataPreparation
 
 
-@pytest.fixture(scope='session')
+@pytest.fixture(autouse=True)
 def test_data_path():
     data_path: Path = Path(__file__).resolve().parents[0].joinpath('data')
     return data_path
 
 
 @pytest.fixture(scope='class')
-def temporary_data_path(tmp_path_factory):
+def create_temp_down_path(request, tmp_path_factory):
+    # cls = request.node.cls
+    # cls.temporary_data_path = tmp_path_factory.mktemp('data')
+    # yield
+    # del cls.temporary_data_path
     return tmp_path_factory.mktemp('data')
 
 
-@pytest.fixture(scope='session')
+@pytest.fixture(autouse=True)
 def meta_file_path_dict(test_data_path):
     """Creates Dictionary with local metadata file paths"""
     meta_file_path_dict: dict[str, list[str]] = {
@@ -69,6 +66,12 @@ def meta_file_path_dict(test_data_path):
     return meta_file_path_dict
 
 
+@pytest.fixture(autouse=True)
+def replace_meta_filepath_dict(monkeypatch, meta_file_path_dict):
+    """Disable all HTTP requests by removing requests.sessions.Session.request."""
+    monkeypatch.setattr(data_preparation, 'META_FILE_PATH_DICT', meta_file_path_dict)
+
+
 @pytest.fixture
 def lf_meta_stations_test_result(test_data_path):
     """Loads stations test result into LazyFrame"""
@@ -93,87 +96,101 @@ def lf_meta_datainventory_test_result(test_data_path):
     ).cast({cs.integer(): pl.Int8, cs.starts_with('data_'): pl.Datetime})
 
 
-@pytest.fixture(scope='class')
-def attach_lf_meta_stations(request, meta_file_path_dict, temporary_data_path):
-    """Returns meta_stations created by load_metadata()"""
-    cls = request.node.cls
-    cls.lf_meta_stations = load_metadata(
-        meta_type='stations',
-        file_path_dict=meta_file_path_dict,
-        meta_schema=SCHEMA_META_STATIONS,
-        meta_cols_to_keep=COLS_TO_KEEP_META_STATIONS,
-        data_path=temporary_data_path,
-    )
-    yield
-    del cls.lf_meta_stations
+# @pytest.fixture(scope='class')
+# def attach_lf_meta_stations(request, meta_file_path_dict, temporary_data_path):
+#     """Returns meta_stations created by load_metadata()"""
+#     cls = request.node.cls
+#     cls.lf_meta_stations = cls.load_metadata()
+#     yield
+#     del cls.lf_meta_stations
 
 
-@pytest.fixture(scope='class')
-def attach_lf_meta_parameters(request, meta_file_path_dict, temporary_data_path):
-    """Returns meta_parameters created by load_metadata()"""
-    cls = request.node.cls
-    cls.lf_meta_parameters = load_metadata(
-        meta_type='parameters',
-        file_path_dict=meta_file_path_dict,
-        meta_schema=SCHEMA_META_PARAMETERS,
-        meta_cols_to_keep=COLS_TO_KEEP_META_PARAMETERS,
-        data_path=temporary_data_path,
-    )
-    yield
-    del cls.lf_meta_parameters
+# @pytest.fixture(scope='class')
+# def attach_testdata_instance(request, temporary_data_path, test_data_path):
+#     cls = request.node.cls
+#     cls.testdata_instance = DataPreparation(
+#         download_path=temporary_data_path, data_path=test_data_path, update_flag=False
+#     )
+#     yield
+#     del cls.testdata_instance
 
 
-@pytest.fixture(scope='class')
-def attach_lf_meta_datainventory(request, meta_file_path_dict, temporary_data_path):
-    """Returns meta_datainventory created by load_metadata()"""
-    cls = request.node.cls
-    cls.lf_meta_datainventory = load_metadata(
-        meta_type='datainventory',
-        file_path_dict=meta_file_path_dict,
-        meta_schema=SCHEMA_META_DATAINVENTORY,
-        meta_cols_to_keep=COLS_TO_KEEP_META_DATAINVENTORY,
-        data_path=temporary_data_path,
-    )
-    yield
-    del cls.lf_meta_datainventory
+# @pytest.fixture(scope='class')
+# def attach_lf_meta_parameters(request, meta_file_path_dict, temporary_data_path):
+#     """Returns meta_parameters created by load_metadata()"""
+#     cls = request.node.cls
+#     cls.lf_meta_parameters = cls.load_metadata()
+#     yield
+#     del cls.lf_meta_parameters
+
+
+# @pytest.fixture(scope='class')
+# def attach_lf_meta_datainventory(request, meta_file_path_dict, temporary_data_path):
+#     """Returns meta_datainventory created by load_metadata()"""
+#     cls = request.node.cls
+#     cls.lf_meta_datainventory = cls.load_metadata()
+#     yield
+#     del cls.lf_meta_datainventory
 
 
 @pytest.mark.usefixtures(
-    'attach_lf_meta_stations',
-    'attach_lf_meta_parameters',
-    'attach_lf_meta_datainventory',
+    # 'attach_lf_meta_stations',
+    # 'attach_lf_meta_parameters',
+    # 'attach_lf_meta_datainventory',
+    # 'attach_testdata_instance',
 )
 class TestLoadMetadata:
     """Tests function load_metadata()"""
 
+    @pytest.fixture(autouse=True)
+    def setup(self, create_temp_down_path, test_data_path, replace_meta_filepath_dict):
+        self.testdata_instance = self.create_testdata_instance(
+            create_temp_down_path, test_data_path
+        )
+        self.testdata_instance.load_meta_parameters()
+
+        self.testdata_instance.load_meta_datainventory()
+        self.testdata_instance.load_meta_stations()
+
+    def create_testdata_instance(self, temp_down_path, data_path):
+        return DataPreparation(
+            download_path=temp_down_path,
+            data_path=data_path,
+            update_flag=False,
+        )
+
     def test_load_metadata_stations_is_lazyframe(self):
         """Tests whether returned frame is LazyFrame"""
-        assert isinstance(self.lf_meta_stations, pl.LazyFrame)
+        assert isinstance(self.testdata_instance.meta_stations, pl.LazyFrame)
 
     def test_load_metadata_stations_assert_equal_lazyframes(
-        self, meta_file_path_dict, lf_meta_stations_test_result
+        self, meta_file_path_dict, lf_meta_stations_test_result, monkeypatch
     ):
         """Tests if returned frame is equal to test data"""
-        assert_frame_equal(self.lf_meta_stations, lf_meta_stations_test_result)
+        assert_frame_equal(
+            self.testdata_instance.meta_stations, lf_meta_stations_test_result
+        )
 
     def test_load_metadata_parameters_is_lazyframe(self):
         """Tests whether returned frame is LazyFrame"""
-        assert isinstance(self.lf_meta_parameters, pl.LazyFrame)
+        assert isinstance(self.testdata_instance.meta_parameters, pl.LazyFrame)
 
     def test_load_metadata_parameters_assert_equal_lazyframes(
         self, meta_file_path_dict, lf_meta_parameters_test_result
     ):
         """Tests if returned frame is equal to test data"""
-        assert_frame_equal(self.lf_meta_parameters, lf_meta_parameters_test_result)
+        assert_frame_equal(
+            self.testdata_instance.meta_parameters, lf_meta_parameters_test_result
+        )
 
     def test_load_metadata_datainventory_is_lazyframe(self):
         """Tests whether returned frame is LazyFrame"""
-        assert isinstance(self.lf_meta_datainventory, pl.LazyFrame)
+        assert isinstance(self.testdata_instance.meta_datainventory, pl.LazyFrame)
 
     def test_load_metadata_datainventory_assert_equal_lazyframes(
         self, meta_file_path_dict, lf_meta_datainventory_test_result
     ):
         """Tests if returned frame is equal to test data"""
         assert_frame_equal(
-            self.lf_meta_datainventory, lf_meta_datainventory_test_result
+            self.testdata_instance.meta_datainventory, lf_meta_datainventory_test_result
         )

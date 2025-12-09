@@ -21,6 +21,7 @@ from meteoshrooms.data_preparation.constants import (
     ARGS_LOAD_META_STATIONS,
     DTYPE_DICT,
     EXPR_WEATHER_AGGREGATION_TYPES,
+    META_FILE_PATH_DICT,
     METEO_CSV_ENCODING,
     PARAMETER_AGGREGATION_TYPES,
     SINK_PARQUET_KWARGS,
@@ -51,12 +52,11 @@ EXPR_METRICS_AGGREGATION_TYPE_WHEN_THEN: pl.Expr = (
 )
 
 
-def load_metadata(
+def load_metadata_to_lazyframe(
     meta_type: str,
-    file_path_dict: dict[str, list[str]],
     meta_schema: Mapping[str, type[pl.DataType]],
     meta_cols_to_keep: Sequence[str],
-    data_path: Path = DATA_PATH,
+    data_path: Path,
 ) -> pl.LazyFrame:
     """Load metadata from a Parquet file.
 
@@ -85,12 +85,95 @@ def load_metadata(
                 schema=meta_schema,
                 columns=meta_cols_to_keep,
             )
-            for file_path in file_path_dict[meta_type]
+            for file_path in META_FILE_PATH_DICT[meta_type]
         ]
     ).lazy()
     frame_meta.sink_parquet(Path(data_path, f'meta_{meta_type}.parquet'))
     logger.debug('frame_meta written to parquet')
     return frame_meta
+
+
+def load_metadata_per_type(meta_type: str, data_path, meta_schema, meta_cols_to_keep):
+    metadata = load_metadata_to_lazyframe(
+        meta_type, meta_schema, meta_cols_to_keep, data_path
+    )
+    logger.debug(f'meta_{meta_type} generated as {type(metadata)}')
+    return metadata
+
+
+class DataPreparation:
+    def __init__(
+        self,
+        download_path,
+        data_path: Path | None = None,
+        update_flag=False,
+    ):
+        self.download_path = download_path
+        if data_path:
+            self.data_path = data_path
+        else:
+            self.data_path = DATA_PATH
+        self.update_flag = update_flag
+
+    def create_weather_schema_dict(self) -> dict[Any, type[pl.DataType]]:
+        self.weather_schema_dict = {
+            colname: DTYPE_DICT[datatype]
+            for colname, datatype in self.meta_parameters.select(
+                pl.col('parameter_shortname'), pl.col('parameter_datatype')
+            )
+            .collect()
+            .iter_rows()
+        }
+        logger.debug(
+            f'weather_schema_dict generated as {type(self.weather_schema_dict)}'
+        )
+        return self.weather_schema_dict
+
+    def load_meta_parameters(self):
+        self.meta_parameters = load_metadata_per_type(
+            'parameters', self.data_path, *ARGS_LOAD_META_PARAMETERS
+        )
+        return self.meta_parameters
+
+    def load_meta_datainventory(self):
+        self.meta_datainventory = load_metadata_per_type(
+            'datainventory', self.data_path, *ARGS_LOAD_META_DATAINVENTORY
+        )
+        return self.meta_datainventory
+
+    def load_meta_stations(self):
+        self.meta_stations = load_metadata_per_type(
+            'stations', self.data_path, *ARGS_LOAD_META_STATIONS
+        )
+        return self.meta_stations
+
+    def load_metadata(self):
+        return (
+            self.load_meta_parameters(),
+            self.load_meta_datainventory(),
+            self.load_meta_stations(),
+        )
+
+    def load_weather_data(self):
+        self.weather_data: pl.LazyFrame = load_weather(
+            self.meta_stations,
+            schema_dict_lazyframe=self.weather_schema_dict,
+            down_path=self.download_path,
+            update_data=self.update_flag,
+        )
+        logger.debug(f'weather_data generated as {type(self.weather_data)}')
+        weather_data_file_path: Path = Path(self.data_path, 'weather_data.parquet')
+        self.weather_data.sink_parquet(weather_data_file_path, **SINK_PARQUET_KWARGS)
+        logger.debug(f'weather_data written to {weather_data_file_path}')
+        return self.weather_data
+
+    def load_metrics(self):
+        self.metrics: pl.LazyFrame = create_metrics(self.weather_data, TIME_PERIODS)
+        logger.debug(f'metrics generated as {type(self.metrics)}')
+        metrics_file_path: Path = Path(self.data_path, 'metrics.parquet')
+        self.metrics.sink_parquet(metrics_file_path, **SINK_PARQUET_KWARGS)
+        logger.debug(f'metrics written to {metrics_file_path}')
+        return self.metrics
 
 
 def combine_urls_parts_to_string(
@@ -140,29 +223,25 @@ def load_weather(
     down_path: Path,
     update_data=False,
 ) -> pl.LazyFrame:
+    # Create stations dataframe
     stations: pl.DataFrame = filter_unique_station_names(metadata).collect()
-    kwargs_lazyframe: dict = {
-        'separator': ';',
-        'try_parse_dates': True,
-        'schema_overrides': schema_dict_lazyframe,
-    }
+    # Create dict for lazyframe kwargs
+    kwargs_lazyframe: dict = create_kwargs_lazyframe(schema_dict_lazyframe)
+    # Generate polars.Series with station names for both stations types
     station_series_precipitation: pl.Series = filter_stations_to_series(
         stations, station_type='Automatic precipitation stations'
     )
     station_series_weather: pl.Series = filter_stations_to_series(
         stations, station_type='Automatic weather stations'
     )
+    # Download most recent CSV files for both station types
     download_files(
-        pl.concat(
-            generate_download_urls(station_series, station_type, 'now')
-            for station_series, station_type in zip(
-                (station_series_weather, station_series_precipitation),
-                ('weather', 'rainfall'),
-                strict=False,
-            )
+        generate_file_path_series(
+            station_series_precipitation, station_series_weather, timeframe='now'
         ),
         down_path,
     )
+    # If data only needs to be updated, do that
     if update_data:
         return update_weather_data(
             down_path,
@@ -180,16 +259,22 @@ def load_weather(
         for period in TIMEFRAME_STRINGS
     )
     download_files(
-        pl.concat(
-            generate_download_urls(station_series, station_type, 'recent')
-            for station_series, station_type in zip(
-                (station_series_weather, station_series_precipitation),
-                ('weather', 'rainfall'),
-                strict=False,
-            )
+        generate_file_path_series(
+            station_series_precipitation, station_series_weather, timeframe='recent'
         ),
         down_path,
     )
+    # download_files(
+    #     pl.concat(
+    #         generate_download_urls(station_series, station_type, 'recent')
+    #         for station_series, station_type in zip(
+    #             (station_series_weather, station_series_precipitation),
+    #             ('weather', 'rainfall'),
+    #             strict=False,
+    #         )
+    #     ),
+    #     down_path,
+    # )
     try:
         weather: pl.LazyFrame = create_rainfall_weather_lazyframes(
             down_path, urls_weather, kwargs_lazyframe
@@ -205,6 +290,31 @@ def load_weather(
             down_path, urls_rainfall, kwargs_lazyframe
         )
     return concat_rainfall_weather_lazyframes(metadata, rainfall, weather)
+
+
+def generate_file_path_series(
+    station_series_precipitation: pl.Series,
+    station_series_weather: pl.Series,
+    timeframe: str,
+) -> pl.Series:
+    return pl.concat(
+        generate_download_urls(station_series, station_type, timeframe)
+        for station_series, station_type in zip(
+            (station_series_weather, station_series_precipitation),
+            ('weather', 'rainfall'),
+            strict=False,
+        )
+    )
+
+
+def create_kwargs_lazyframe(
+    schema_dict_lazyframe: Mapping[str, type[pl.DataType]],
+) -> dict[str, str | bool | Mapping[str, type[pl.DataType]]]:
+    return {
+        'separator': ';',
+        'try_parse_dates': True,
+        'schema_overrides': schema_dict_lazyframe,
+    }
 
 
 def update_weather_data(
@@ -431,19 +541,6 @@ def filter_stations_to_series(stations: pl.DataFrame, station_type: str) -> pl.S
     )
 
 
-def create_weather_schema_dict(
-    meta_parameters: pl.LazyFrame,
-) -> dict[Any, type[pl.DataType]]:
-    return {
-        colname: DTYPE_DICT[datatype]
-        for colname, datatype in meta_parameters.select(
-            pl.col('parameter_shortname'), pl.col('parameter_datatype')
-        )
-        .collect()
-        .iter_rows()
-    }
-
-
 if __name__ == '__main__':
     parser: argparse.ArgumentParser = argparse.ArgumentParser()
     parser.add_argument('-m', '--metrics', action='store_true')
@@ -458,38 +555,13 @@ if __name__ == '__main__':
         logger.info('Metrics generation activated')
     if args.update:
         logger.info('Update of existing data activated')
-    meta_parameters: pl.LazyFrame = load_metadata(
-        'parameters', *ARGS_LOAD_META_PARAMETERS
-    )
-    logger.debug(f'meta_parameters generated as {type(meta_parameters)}')
-    weather_schema_dict: dict[str, type[pl.DataType]] = create_weather_schema_dict(
-        meta_parameters
-    )
-    logger.debug(f'weather_schema_dict generated as {type(weather_schema_dict)}')
-    meta_stations: pl.LazyFrame = (
-        load_metadata('stations', *ARGS_LOAD_META_STATIONS).collect().lazy()
-    )
-    logger.debug(f'meta_stations generated as {type(meta_stations)}')
-    meta_datainventory: pl.LazyFrame = (
-        load_metadata('datainventory', *ARGS_LOAD_META_DATAINVENTORY).collect().lazy()
-    )
-    logger.debug(f'meta_datainventory generated as {type(meta_datainventory)}')
+
     with tempfile.TemporaryDirectory() as tmpdir:
         down_path: Path = Path(tmpdir)
         logger.info(f'Download path: {down_path}')
-        weather_data: pl.LazyFrame = load_weather(
-            meta_stations,
-            schema_dict_lazyframe=weather_schema_dict,
-            down_path=down_path,
-            update_data=args.update,
-        )
-        logger.debug(f'weather_data generated as {type(weather_data)}')
+        new_data = DataPreparation(download_path=down_path, update_flag=args.update)
+        new_data.load_metadata()
+        new_data.create_weather_schema_dict()
+        new_data.load_weather_data()
         if args.metrics:
-            metrics: pl.LazyFrame = create_metrics(weather_data, TIME_PERIODS)
-            logger.debug(f'metrics generated as {type(metrics)}')
-            metrics_file_path: Path = Path(DATA_PATH, 'metrics.parquet')
-            metrics.sink_parquet(metrics_file_path, **SINK_PARQUET_KWARGS)
-            logger.debug(f'metrics written to {metrics_file_path}')
-        weather_data_file_path: Path = Path(DATA_PATH, 'weather_data.parquet')
-        weather_data.sink_parquet(weather_data_file_path, **SINK_PARQUET_KWARGS)
-        logger.debug(f'weather_data written to {weather_data_file_path}')
+            new_data.load_metrics()
