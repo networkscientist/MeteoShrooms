@@ -1,6 +1,5 @@
 """Prepare data for the MeteoShrooms dashboard"""
 
-import argparse
 import logging
 import tempfile
 from collections.abc import Sequence
@@ -12,7 +11,9 @@ from zoneinfo import ZoneInfo
 import polars as pl
 import polars.exceptions
 import requests
+import typer
 from requests.adapters import HTTPAdapter, Retry
+from typing_extensions import Annotated
 
 from meteoshrooms.constants import DATA_PATH, TIMEZONE_SWITZERLAND_STRING
 from meteoshrooms.data_preparation.constants import (
@@ -50,6 +51,8 @@ EXPR_METRICS_AGGREGATION_TYPE_WHEN_THEN: pl.Expr = (
     .otherwise(pl.lit('mean'))
     .alias('type')
 )
+
+app = typer.Typer()
 
 
 def load_metadata_to_lazyframe(
@@ -543,33 +546,66 @@ def filter_stations_to_series(stations: pl.DataFrame, station_type: str) -> pl.S
     )
 
 
-if __name__ == '__main__':
-    parser: argparse.ArgumentParser = argparse.ArgumentParser()
-    parser.add_argument('-m', '--metrics', action='store_true')
-    parser.add_argument('-v', '--verbose_warn', action='store_true')
-    parser.add_argument('-vv', '--verbose_info', action='store_true')
-    parser.add_argument('-vvv', '--verbose_debug', action='store_true')
+def hello(name: str):
+    print(f'Hello {name}')
 
-    parser.add_argument('-u', '--update', action='store_true')
-    args: argparse.Namespace = parser.parse_args()
-    if args.verbose_warn:
+
+def goodbye(name: str, formal: bool = False):
+    if formal:
+        print(f'Goodbye Ms. {name}. Have a good day.')
+    else:
+        print(f'Bye {name}!')
+
+
+@app.command()
+def main(
+    metrics: Annotated[
+        str,
+        typer.Option(
+            '--metrics',
+            '-m',
+            help='metrics_help',
+        ),
+    ] = False,
+    update: Annotated[
+        str, typer.Option('--update', '-u', help='update values')
+    ] = False,
+    verbose_warn: Annotated[
+        str,
+        typer.Option(
+            '--verbose',
+            '-v',
+            help='Verbose output. Can be multiplied, e.g -vv or -vvv for even more verbosity',
+        ),
+    ] = False,
+    verbose_info: Annotated[
+        str, typer.Option('--verbose_info', '-vv', help='verbose info', hidden=True)
+    ] = False,
+    verbose_debug: Annotated[
+        str, typer.Option('--verbose_debug', '-vvv', help='verbose debug', hidden=True)
+    ] = False,
+):
+    if verbose_warn:
         logger.setLevel(logging.WARNING)
-    if args.verbose_info:
+    if verbose_info:
         logger.setLevel(logging.INFO)
-    if args.verbose_debug:
+    if verbose_debug:
         logger.setLevel(logging.DEBUG)
     logger.debug('Logger created')
-    logger.debug(f'Arguments parsed: {args}')
-    if args.metrics:
+    if metrics:
         logger.info('Metrics generation activated')
-    if args.update:
+    if update:
         logger.info('Update of existing data activated')
     with tempfile.TemporaryDirectory() as tmpdir:
         down_path: Path = Path(tmpdir)
         logger.info(f'Download path: {down_path}')
-        new_data = DataPreparation(download_path=down_path, update_flag=args.update)
+        new_data = DataPreparation(download_path=down_path, update_flag=update)
         new_data.load_metadata()
         new_data.load_weather_data()
-        if args.metrics:
+        if metrics:
             new_data.load_metrics()
     logger.info('Files successfully downloaded')
+
+
+if __name__ == '__main__':
+    app()
