@@ -36,6 +36,12 @@ from meteoshrooms.data_preparation.constants import (
 logger: logging.Logger = logging.getLogger(__name__)
 console_handler = logging.StreamHandler()
 logger.addHandler(console_handler)
+log_formatter = logging.Formatter(
+    '{asctime} - {levelname} - {message}',
+    style='{',
+    datefmt='%Y-%m-%d %H%M',
+)
+console_handler.setFormatter(log_formatter)
 
 EXPR_METRICS_AGGREGATION_TYPE_WHEN_THEN: pl.Expr = (
     pl.when(pl.col('parameter').is_in(PARAMETER_AGGREGATION_TYPES['sum']))
@@ -82,8 +88,6 @@ def load_metadata(
             for file_path in file_path_dict[meta_type]
         ]
     ).lazy()
-    logger.debug(f'frame_meta with type {meta_type} as pl.LazyFrame created')
-    logger.debug('Try to write frame_meta to parquet')
     frame_meta.sink_parquet(Path(data_path, f'meta_{meta_type}.parquet'))
     logger.debug('frame_meta written to parquet')
     return frame_meta
@@ -449,31 +453,43 @@ if __name__ == '__main__':
     if args.debug:
         logger.setLevel(logging.DEBUG)
     logger.debug('Logger created')
+    logger.debug(f'Arguments parsed: {args}')
+    if args.metrics:
+        logger.info('Metrics generation activated')
+    if args.update:
+        logger.info('Update of existing data activated')
     meta_parameters: pl.LazyFrame = load_metadata(
         'parameters', *ARGS_LOAD_META_PARAMETERS
     )
+    logger.debug(f'meta_parameters generated as {type(meta_parameters)}')
     weather_schema_dict: dict[str, type[pl.DataType]] = create_weather_schema_dict(
         meta_parameters
     )
+    logger.debug(f'weather_schema_dict generated as {type(weather_schema_dict)}')
     meta_stations: pl.LazyFrame = (
         load_metadata('stations', *ARGS_LOAD_META_STATIONS).collect().lazy()
     )
+    logger.debug(f'meta_stations generated as {type(meta_stations)}')
     meta_datainventory: pl.LazyFrame = (
         load_metadata('datainventory', *ARGS_LOAD_META_DATAINVENTORY).collect().lazy()
     )
+    logger.debug(f'meta_datainventory generated as {type(meta_datainventory)}')
     with tempfile.TemporaryDirectory() as tmpdir:
         down_path: Path = Path(tmpdir)
+        logger.info(f'Download path: {down_path}')
         weather_data: pl.LazyFrame = load_weather(
             meta_stations,
             schema_dict_lazyframe=weather_schema_dict,
             down_path=down_path,
             update_data=args.update,
         )
+        logger.debug(f'weather_data generated as {type(weather_data)}')
         if args.metrics:
             metrics: pl.LazyFrame = create_metrics(weather_data, TIME_PERIODS)
-            metrics.sink_parquet(
-                Path(DATA_PATH, 'metrics.parquet'), **SINK_PARQUET_KWARGS
-            )
-        weather_data.sink_parquet(
-            Path(DATA_PATH, 'weather_data.parquet'), **SINK_PARQUET_KWARGS
-        )
+            logger.debug(f'metrics generated as {type(metrics)}')
+            metrics_file_path: Path = Path(DATA_PATH, 'metrics.parquet')
+            metrics.sink_parquet(metrics_file_path, **SINK_PARQUET_KWARGS)
+            logger.debug(f'metrics written to {metrics_file_path}')
+        weather_data_file_path: Path = Path(DATA_PATH, 'weather_data.parquet')
+        weather_data.sink_parquet(weather_data_file_path, **SINK_PARQUET_KWARGS)
+        logger.debug(f'weather_data written to {weather_data_file_path}')
