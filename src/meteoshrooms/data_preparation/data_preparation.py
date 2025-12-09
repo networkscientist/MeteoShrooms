@@ -155,7 +155,6 @@ class DataPreparation:
         )
 
     def load_weather_data(self):
-        print('test')
         if not hasattr(self, 'weather_schema_dict'):
             self.weather_schema_dict = self.create_weather_schema_dict()
         self.weather_data: pl.LazyFrame = load_weather(
@@ -547,10 +546,17 @@ def filter_stations_to_series(stations: pl.DataFrame, station_type: str) -> pl.S
 if __name__ == '__main__':
     parser: argparse.ArgumentParser = argparse.ArgumentParser()
     parser.add_argument('-m', '--metrics', action='store_true')
-    parser.add_argument('-d', '--debug', action='store_true')
+    parser.add_argument('-v', '--verbose_warn', action='store_true')
+    parser.add_argument('-vv', '--verbose_info', action='store_true')
+    parser.add_argument('-vvv', '--verbose_debug', action='store_true')
+
     parser.add_argument('-u', '--update', action='store_true')
     args: argparse.Namespace = parser.parse_args()
-    if args.debug:
+    if args.verbose_warn:
+        logger.setLevel(logging.WARNING)
+    if args.verbose_info:
+        logger.setLevel(logging.INFO)
+    if args.verbose_debug:
         logger.setLevel(logging.DEBUG)
     logger.debug('Logger created')
     logger.debug(f'Arguments parsed: {args}')
@@ -566,3 +572,4 @@ if __name__ == '__main__':
         new_data.load_weather_data()
         if args.metrics:
             new_data.load_metrics()
+    logger.info('Files successfully downloaded')
