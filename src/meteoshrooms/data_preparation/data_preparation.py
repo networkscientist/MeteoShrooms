@@ -155,6 +155,9 @@ class DataPreparation:
         )
 
     def load_weather_data(self):
+        print('test')
+        if not hasattr(self, 'weather_schema_dict'):
+            self.weather_schema_dict = self.create_weather_schema_dict()
         self.weather_data: pl.LazyFrame = load_weather(
             self.meta_stations,
             schema_dict_lazyframe=self.weather_schema_dict,
@@ -555,13 +558,11 @@ if __name__ == '__main__':
         logger.info('Metrics generation activated')
     if args.update:
         logger.info('Update of existing data activated')
-
     with tempfile.TemporaryDirectory() as tmpdir:
         down_path: Path = Path(tmpdir)
         logger.info(f'Download path: {down_path}')
         new_data = DataPreparation(download_path=down_path, update_flag=args.update)
         new_data.load_metadata()
-        new_data.create_weather_schema_dict()
         new_data.load_weather_data()
         if args.metrics:
             new_data.load_metrics()
