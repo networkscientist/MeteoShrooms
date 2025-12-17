@@ -1,4 +1,4 @@
-name: Data Preparation with Python
+name: Data Preparation with Python (from testpypi)
 
 on:
   workflow_dispatch:
