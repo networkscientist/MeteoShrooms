@@ -25,6 +25,7 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
+          activate-environment: "true"
 
       - name: "Set Up Python"
         run: uv python install
