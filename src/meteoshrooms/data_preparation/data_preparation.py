@@ -13,6 +13,7 @@ import polars.exceptions
 import requests
 import typer
 from requests.adapters import HTTPAdapter, Retry
+from rich.progress import track
 from typing_extensions import Annotated
 
 from meteoshrooms.constants import DATA_PATH, TIMEZONE_SWITZERLAND_STRING
@@ -439,7 +440,7 @@ def download_files(urls: Iterable[str], down_path: Path):
             total=5, backoff_factor=0.1, status_forcelist=[500, 502, 503, 504]
         )
         s.mount('https://', HTTPAdapter(max_retries=retries))
-        for url in urls:
+        for url in track(urls, description='Downloading....'):
             try:
                 r = s.get(url)
                 with Path(Path(down_path, Path(url).name)).open('wb') as f:
@@ -560,7 +561,7 @@ def goodbye(name: str, formal: bool = False):
 @app.command()
 def main(
     metrics: Annotated[
-        str,
+        bool,
         typer.Option(
             '--metrics',
             '-m',
@@ -568,10 +569,10 @@ def main(
         ),
     ] = False,
     update: Annotated[
-        str, typer.Option('--update', '-u', help='update values')
+        bool, typer.Option('--update', '-u', help='update values')
     ] = False,
     verbose_warn: Annotated[
-        str,
+        bool,
         typer.Option(
             '--verbose',
             '-v',
@@ -579,10 +580,10 @@ def main(
         ),
     ] = False,
     verbose_info: Annotated[
-        str, typer.Option('--verbose_info', '-vv', help='verbose info', hidden=True)
+        bool, typer.Option('--verbose_info', '-vv', help='verbose info', hidden=True)
     ] = False,
     verbose_debug: Annotated[
-        str, typer.Option('--verbose_debug', '-vvv', help='verbose debug', hidden=True)
+        bool, typer.Option('--verbose_debug', '-vvv', help='verbose debug', hidden=True)
     ] = False,
 ):
     if verbose_warn:
