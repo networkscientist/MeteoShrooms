@@ -5,7 +5,7 @@ build-backend = "uv_build"
 
 [project]
 name = "MeteoShrooms"
-version = "0.3.0"
+version = "0.3.1"
 description = "Dashboard with Key Mushroom Metrics (KMM)"
 authors = [{ name = "Peter Zweifel" }]
 keywords = ["Fungi", "Mushrooms", "Dashboard", "Meteo", "Metrics"]
