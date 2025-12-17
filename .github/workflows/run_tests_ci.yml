@@ -2,7 +2,7 @@ name: Pytest CI
 on:
   push:
     branches:
-      [ master ]
+      [ main ]
     paths-ignore:
       - '.gitattributes'
       - '.github/workflows/**'
@@ -17,7 +17,7 @@ on:
       - '**.svg'
   pull_request:
     branches:
-      [ master ]
+      [ main ]
     paths-ignore:
       - '.gitattributes'
       - '.github/workflows/**'
