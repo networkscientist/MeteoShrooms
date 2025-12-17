@@ -6,11 +6,16 @@ on:
       [ main ]
     tags:
       - '**'
+    paths-ignore:
+      - 'data/**'
   pull_request:
     branches:
       [ main ]
     tags:
       - '**'
+    paths-ignore:
+      - 'data/**'
+
 jobs:
   python-setup:
     runs-on: ubuntu-latest
