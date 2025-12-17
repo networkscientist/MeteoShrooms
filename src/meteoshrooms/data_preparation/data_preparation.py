@@ -585,6 +585,7 @@ def main(
     verbose_debug: Annotated[
         bool, typer.Option('--verbose_debug', '-vvv', help='verbose debug', hidden=True)
     ] = False,
+    data_path: Annotated[Path | None, typer.Argument()] = None,
 ):
     if verbose_warn:
         logger.setLevel(logging.WARNING)
@@ -600,7 +601,9 @@ def main(
     with tempfile.TemporaryDirectory() as tmpdir:
         down_path: Path = Path(tmpdir)
         logger.info(f'Download path: {down_path}')
-        new_data = DataPreparation(download_path=down_path, update_flag=update)
+        new_data = DataPreparation(
+            download_path=down_path, update_flag=update, data_path=data_path
+        )
         new_data.load_metadata()
         new_data.load_weather_data()
         if metrics:
