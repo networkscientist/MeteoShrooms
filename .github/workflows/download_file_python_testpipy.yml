@@ -1,4 +1,4 @@
-name: Data Preparation with Python
+name: Data Preparation with Python (from testpypi)
 
 on:
   workflow_dispatch:
@@ -16,26 +16,24 @@ jobs:
 
     steps:
       - name: "Checkout"
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@v6
         with:
           ssh-key: ${{ secrets.DEPLOY_KEY }}
 
       - name: "Install uv"
-        uses: astral-sh/setup-uv@v6.3.1
+        uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
 
-      - name: "Set up Python"
-        uses: actions/setup-python@v5.6.0
-        with:
-          python-version-file: "pyproject.toml"
+      - name: "Set Up Python"
+        run: uv python install
 
-      - name: "Install Project"
-        run: uv sync
+      - name: "Install MeteoShrooms"
+        run: uv pip install -i https://test.pypi.org/simple/ MeteoShrooms
 
       - name: "Data Preparation with Python"
-        run: uv run src/meteoshrooms/data_preparation/data_preparation.py -m -vv
+        run: data_preparation -m -vvv
 
       # Commit all changed files back to the repository
-      - uses: stefanzweifel/git-auto-commit-action@v6.0.1
+      - uses: stefanzweifel/git-auto-commit-action@v7
