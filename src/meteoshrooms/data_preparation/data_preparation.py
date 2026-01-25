@@ -150,10 +150,13 @@ class DataPreparation:
             update_data=self.update_flag,
         )
         logger.debug(f'weather_data generated as {type(self.weather_data)}')
-        weather_data_file_path: Path = Path(self.data_path, 'weather_data.parquet')
-        self.weather_data.sink_parquet(weather_data_file_path, **SINK_PARQUET_KWARGS)
-        logger.debug(f'weather_data written to {weather_data_file_path}')
         return self.weather_data
+
+    def save_weather_data(self, save_type):
+        if save_type == 'parquet':
+            save_weather_data_to_parquet(
+                frame_weather=self.weather_data, data_path=self.data_path
+            )
 
     def load_metrics(self):
         self.metrics: pl.LazyFrame = create_metrics(self.weather_data, TIME_PERIODS)
@@ -216,6 +219,12 @@ def load_metadata_per_type(meta_type: str, data_path, meta_schema, meta_cols_to_
     )
     logger.debug(f'meta_{meta_type} generated as {type(metadata)}')
     return metadata
+
+
+def save_weather_data_to_parquet(frame_weather: pl.LazyFrame, data_path: Path):
+    weather_data_file_path: Path = Path(data_path, 'weather_data.parquet')
+    frame_weather.sink_parquet(weather_data_file_path, **SINK_PARQUET_KWARGS)
+    logger.debug(f'weather_data written to {weather_data_file_path}')
 
 
 def combine_urls_parts_to_string(
@@ -646,10 +655,12 @@ def main(
             download_path=down_path, update_flag=update, data_path=data_path
         )
         new_data.load_metadata()
-        if weather:
-            new_data.load_weather_data()
         if parquet:
             new_data.save_metadata('parquet')
+        if weather:
+            new_data.load_weather_data()
+            if parquet:
+                new_data.save_weather_data('parquet')
         if metrics:
             new_data.load_metrics()
     logger.info('Files successfully downloaded')
