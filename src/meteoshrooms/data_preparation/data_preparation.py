@@ -56,6 +56,114 @@ EXPR_METRICS_AGGREGATION_TYPE_WHEN_THEN: pl.Expr = (
 app = typer.Typer()
 
 
+class DataPreparation:
+    def __init__(
+        self,
+        download_path,
+        data_path: Path | None = None,
+        update_flag=False,
+    ):
+        self.download_path = download_path
+        if data_path:
+            self.data_path = data_path
+        else:
+            self.data_path = DATA_PATH
+        self.update_flag = update_flag
+
+    def create_weather_schema_dict(self) -> dict[Any, type[pl.DataType]]:
+        self.weather_schema_dict = {
+            colname: DTYPE_DICT[datatype]
+            for colname, datatype in self.meta_parameters.select(
+                pl.col('parameter_shortname'), pl.col('parameter_datatype')
+            )
+            .collect()
+            .iter_rows()
+        }
+        logger.debug(
+            f'weather_schema_dict generated as {type(self.weather_schema_dict)}'
+        )
+        return self.weather_schema_dict
+
+    def load_meta_parameters(self):
+        self.meta_parameters = load_metadata_per_type(
+            'parameters', self.data_path, *ARGS_LOAD_META_PARAMETERS
+        )
+        return self.meta_parameters
+
+        # if save_type == 'postgres':
+
+    def load_meta_datainventory(self):
+        self.meta_datainventory = load_metadata_per_type(
+            'datainventory', self.data_path, *ARGS_LOAD_META_DATAINVENTORY
+        )
+        return self.meta_datainventory
+
+    def load_meta_stations(self):
+        self.meta_stations = load_metadata_per_type(
+            'stations', self.data_path, *ARGS_LOAD_META_STATIONS
+        )
+        return self.meta_stations
+
+    def load_metadata(self):
+        return (
+            self.load_meta_parameters(),
+            self.load_meta_datainventory(),
+            self.load_meta_stations(),
+        )
+
+    def save_meta_parameters(self, save_type):
+        if save_type == 'parquet':
+            save_metadata_to_parquet(
+                frame_meta=self.meta_parameters,
+                data_path=self.data_path,
+                meta_type='parameters',
+            )
+
+    def save_meta_stations(self, save_type):
+        if save_type == 'parquet':
+            save_metadata_to_parquet(
+                frame_meta=self.meta_stations,
+                data_path=self.data_path,
+                meta_type='stations',
+            )
+
+    def save_meta_datainventory(self, save_type):
+        if save_type == 'parquet':
+            save_metadata_to_parquet(
+                frame_meta=self.meta_datainventory,
+                data_path=self.data_path,
+                meta_type='datainventory',
+            )
+
+    def save_metadata(self, save_type):
+        self.save_meta_parameters(save_type)
+        self.save_meta_stations(save_type)
+        self.save_meta_datainventory(save_type)
+
+    def load_weather_data(self):
+        if not hasattr(self, 'weather_schema_dict'):
+            self.weather_schema_dict = self.create_weather_schema_dict()
+        self.weather_data: pl.LazyFrame = load_weather(
+            self.meta_stations,
+            schema_dict_lazyframe=self.weather_schema_dict,
+            down_path=self.download_path,
+            update_data=self.update_flag,
+        )
+        logger.debug(f'weather_data generated as {type(self.weather_data)}')
+        weather_data_file_path: Path = Path(self.data_path, 'weather_data.parquet')
+        self.weather_data.sink_parquet(weather_data_file_path, **SINK_PARQUET_KWARGS)
+        logger.debug(f'weather_data written to {weather_data_file_path}')
+        return self.weather_data
+
+    def load_metrics(self):
+        self.metrics: pl.LazyFrame = create_metrics(self.weather_data, TIME_PERIODS)
+        logger.debug(f'metrics generated as {type(self.metrics)}')
+        metrics_file_path: Path = Path(self.data_path, 'metrics.parquet')
+        self.metrics.sink_parquet(metrics_file_path, **SINK_PARQUET_KWARGS)
+        logger.debug(f'metrics written to {metrics_file_path}')
+        return self.metrics
+
+
 def load_metadata_to_lazyframe(
     meta_type: str,
     meta_schema: Mapping[str, type[pl.DataType]],
@@ -92,9 +200,14 @@ def load_metadata_to_lazyframe(
             for file_path in META_FILE_PATH_DICT[meta_type]
         ]
     ).lazy()
-    frame_meta.sink_parquet(Path(data_path, f'meta_{meta_type}.parquet'))
-    logger.debug('frame_meta written to parquet')
+    # frame_meta.sink_parquet(Path(data_path, f'meta_{meta_type}.parquet'))
     return frame_meta
+
+
+def save_metadata_to_parquet(frame_meta: pl.LazyFrame, data_path: Path, meta_type: str):
+    out_path = Path(data_path, f'meta_{meta_type}.parquet')
+    frame_meta.sink_parquet(out_path)
+    logger.debug(f'{out_path} written to parquet')
 
 
 def load_metadata_per_type(meta_type: str, data_path, meta_schema, meta_cols_to_keep):
@@ -103,83 +216,6 @@ def load_metadata_per_type(meta_type: str, data_path, meta_schema, meta_cols_to_
     )
     logger.debug(f'meta_{meta_type} generated as {type(metadata)}')
     return metadata
-
-
-class DataPreparation:
-    def __init__(
-        self,
-        download_path,
-        data_path: Path | None = None,
-        update_flag=False,
-    ):
-        self.download_path = download_path
-        if data_path:
-            self.data_path = data_path
-        else:
-            self.data_path = DATA_PATH
-        self.update_flag = update_flag
-
-    def create_weather_schema_dict(self) -> dict[Any, type[pl.DataType]]:
-        self.weather_schema_dict = {
-            colname: DTYPE_DICT[datatype]
-            for colname, datatype in self.meta_parameters.select(
-                pl.col('parameter_shortname'), pl.col('parameter_datatype')
-            )
-            .collect()
-            .iter_rows()
-        }
-        logger.debug(
-            f'weather_schema_dict generated as {type(self.weather_schema_dict)}'
-        )
-        return self.weather_schema_dict
-
-    def load_meta_parameters(self):
-        self.meta_parameters = load_metadata_per_type(
-            'parameters', self.data_path, *ARGS_LOAD_META_PARAMETERS
-        )
-        return self.meta_parameters
-
-    def load_meta_datainventory(self):
-        self.meta_datainventory = load_metadata_per_type(
-            'datainventory', self.data_path, *ARGS_LOAD_META_DATAINVENTORY
-        )
-        return self.meta_datainventory
-
-    def load_meta_stations(self):
-        self.meta_stations = load_metadata_per_type(
-            'stations', self.data_path, *ARGS_LOAD_META_STATIONS
-        )
-        return self.meta_stations
-
-    def load_metadata(self):
-        return (
-            self.load_meta_parameters(),
-            self.load_meta_datainventory(),
-            self.load_meta_stations(),
-        )
-
-    def load_weather_data(self):
-        if not hasattr(self, 'weather_schema_dict'):
-            self.weather_schema_dict = self.create_weather_schema_dict()
-        self.weather_data: pl.LazyFrame = load_weather(
-            self.meta_stations,
-            schema_dict_lazyframe=self.weather_schema_dict,
-            down_path=self.download_path,
-            update_data=self.update_flag,
-        )
-        logger.debug(f'weather_data generated as {type(self.weather_data)}')
-        weather_data_file_path: Path = Path(self.data_path, 'weather_data.parquet')
-        self.weather_data.sink_parquet(weather_data_file_path, **SINK_PARQUET_KWARGS)
-        logger.debug(f'weather_data written to {weather_data_file_path}')
-        return self.weather_data
-
-    def load_metrics(self):
-        self.metrics: pl.LazyFrame = create_metrics(self.weather_data, TIME_PERIODS)
-        logger.debug(f'metrics generated as {type(self.metrics)}')
-        metrics_file_path: Path = Path(self.data_path, 'metrics.parquet')
-        self.metrics.sink_parquet(metrics_file_path, **SINK_PARQUET_KWARGS)
-        logger.debug(f'metrics written to {metrics_file_path}')
-        return self.metrics
 
 
 def combine_urls_parts_to_string(
@@ -560,12 +596,28 @@ def goodbye(name: str, formal: bool = False):
 
 @app.command()
 def main(
+    parquet: Annotated[
+        bool,
+        typer.Option(
+            '--parquet',
+            '-p',
+            help='Save to parquet',
+        ),
+    ] = False,
+    weather: Annotated[
+        bool,
+        typer.Option(
+            '--weather',
+            '-w',
+            help='load weather',
+        ),
+    ] = False,
     metrics: Annotated[
         bool,
         typer.Option(
             '--metrics',
             '-m',
-            help='metrics_help',
+            help='load metrics',
         ),
     ] = False,
     update: Annotated[
@@ -605,7 +657,10 @@ def main(
             download_path=down_path, update_flag=update, data_path=data_path
         )
         new_data.load_metadata()
-        new_data.load_weather_data()
+        if weather:
+            new_data.load_weather_data()
+        if parquet:
+            new_data.save_metadata('parquet')
         if metrics:
             new_data.load_metrics()
     logger.info('Files successfully downloaded')
