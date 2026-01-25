@@ -583,17 +583,6 @@ def filter_stations_to_series(stations: pl.DataFrame, station_type: str) -> pl.S
     )
 
 
-def hello(name: str):
-    print(f'Hello {name}')
-
-
-def goodbye(name: str, formal: bool = False):
-    if formal:
-        print(f'Goodbye Ms. {name}. Have a good day.')
-    else:
-        print(f'Bye {name}!')
-
-
 @app.command()
 def main(
     parquet: Annotated[
