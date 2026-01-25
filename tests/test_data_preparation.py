@@ -12,7 +12,7 @@ from meteoshrooms.data_preparation.data_preparation import DataPreparation
 
 
 @pytest.fixture(autouse=True)
-def test_data_path():
+def test_data_path() -> Path:
     data_path: Path = Path(__file__).resolve().parents[0].joinpath('data')
     return data_path
 
@@ -143,20 +143,35 @@ class TestLoadMetadata:
     """Tests function load_metadata()"""
 
     @pytest.fixture(autouse=True)
-    def setup(self, create_temp_down_path, test_data_path, replace_meta_filepath_dict):
+    def setup(self, test_data_path: Path, replace_meta_filepath_dict):
         self.testdata_instance = self.create_testdata_instance(
-            create_temp_down_path, test_data_path
+            data_path=test_data_path,
+            parquet_flag=True,
+            postgres_flag=False,
+            weather_flag=True,
+            metrics_flag=True,
+            update_flag=False,
         )
         self.testdata_instance.load_meta_parameters()
-
         self.testdata_instance.load_meta_datainventory()
         self.testdata_instance.load_meta_stations()
 
-    def create_testdata_instance(self, temp_down_path, data_path):
+    def create_testdata_instance(
+        self,
+        data_path: Path,
+        parquet_flag: bool,
+        postgres_flag: bool,
+        weather_flag: bool,
+        metrics_flag: bool,
+        update_flag: bool,
+    ):
         return DataPreparation(
-            download_path=temp_down_path,
             data_path=data_path,
-            update_flag=False,
+            parquet_flag=parquet_flag,
+            postgres_flag=postgres_flag,
+            weather_flag=weather_flag,
+            metrics_flag=metrics_flag,
+            update_flag=update_flag,
         )
 
     def test_load_metadata_stations_is_lazyframe(self):
