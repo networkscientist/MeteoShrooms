@@ -1,21 +1,12 @@
 """Provide static data for the MeteoShrooms dashboard ui"""
 
-from typing import Sequence
-
 import polars as pl
 import streamlit as st
 from polars import LazyFrame
-from streamlit.delta_generator import DeltaGenerator
 
 from meteoshrooms.dashboard.constants import (
     NUM_DAYS_DELTA,
-    NUM_DAYS_VAL,
     PARAMETER_AGGREGATION_TYPES,
-    WEATHER_SHORT_LABEL_DICT,
-)
-from meteoshrooms.dashboard.dashboard_utils import (
-    META_PARAMETERS,
-    WEATHER_COLUMN_NAMES_DICT,
 )
 
 
@@ -62,14 +53,24 @@ def create_metrics_expander_info(num_days_value: float, num_days_delta: float):
         st.info('Data Sources: MeteoSwiss')
 
 
-def create_metric_tooltip_string(metric_name: str) -> str:
-    return f'{WEATHER_COLUMN_NAMES_DICT[metric_name]} in {META_PARAMETERS.filter(pl.col("parameter_shortname") == metric_name).select("parameter_unit").item()}'
+def create_metric_tooltip_string(
+    metric_name: str, meta_parameters, weather_column_names_dict
+) -> str:
+    return f'{weather_column_names_dict[metric_name]} in {
+        meta_parameters.filter(pl.col("parameter_shortname") == metric_name)
+        .select("parameter_unit")
+        .item()
+    }'
 
 
-def create_metric_kwargs(metric_name) -> dict[str, bool | str]:
+def create_metric_kwargs(
+    metric_name, meta_parameters, weather_column_names_dict
+) -> dict[str, bool | str]:
     return {
         'border': True,
-        'help': create_metric_tooltip_string(metric_name),
+        'help': create_metric_tooltip_string(
+            metric_name, meta_parameters, weather_column_names_dict
+        ),
         'height': 'stretch',
     }
 
@@ -88,54 +89,25 @@ def filter_metrics_time_period(
 
 
 def calculate_metric_value(
-    metrics: pl.LazyFrame, metric_name: str, station_name: str, number_days: int
+    df_metrics: pl.LazyFrame,
+    metric_short_code: str,
+    station_name: str,
+    number_days: int,
 ) -> float | None:
     try:
         df_filtered: LazyFrame | None = filter_metrics_time_period(
-            metrics, station_name, number_days, metric_name
+            df_metrics, station_name, number_days, metric_short_code
         )
         if df_filtered is not None:
-            if metric_name in PARAMETER_AGGREGATION_TYPES['sum']:
-                df_filtered = df_filtered.select(pl.col(metric_name) / number_days)
+            if metric_short_code in PARAMETER_AGGREGATION_TYPES['sum']:
+                df_filtered = df_filtered.select(
+                    pl.col(metric_short_code) / number_days
+                )
             return df_filtered.collect().item()
         return None
     except ValueError:
         # If a station has data missing, return None
         return None
-
-
-def create_metric_section(
-    metrics: pl.LazyFrame, station_name: str, metrics_list: Sequence[str]
-):
-    st.subheader(station_name)
-
-    cols_metric: list[DeltaGenerator] = st.columns(len(metrics_list))
-    for col, metric_name in zip(
-        cols_metric,
-        metrics_list,
-        strict=False,
-    ):
-        val: float | None = calculate_metric_value(
-            metrics, metric_name, station_name, number_days=NUM_DAYS_VAL
-        )
-
-        metric_label: str = WEATHER_SHORT_LABEL_DICT[metric_name]
-        if val is not None:
-            delta: str | None = calculate_metric_delta(
-                metric_name, metrics, station_name, val
-            )
-            col.metric(
-                label=metric_label,
-                value=convert_metric_value_to_string_for_metric_section(
-                    metric_name, val
-                ),
-                delta=delta,
-                **create_metric_kwargs(metric_name),
-            )
-        else:
-            col.metric(
-                label=metric_label, value='-', **create_metric_kwargs(metric_name)
-            )
 
 
 def calculate_metric_delta(
@@ -149,14 +121,3 @@ def calculate_metric_delta(
             round(val - val_delta, 1),
         )
     return '-'
-
-
-def convert_metric_value_to_string_for_metric_section(
-    metric_name: str, val: float
-) -> str:
-    return ' '.join(
-        (
-            str(round(val, 1)),
-            (get_metric_emoji(val) if metric_name == 'rre150h0' else ''),
-        )
-    )
