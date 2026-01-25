@@ -59,7 +59,7 @@ app = typer.Typer()
 class DataPreparation:
     def __init__(
         self,
-        download_path,
+        # download_path,
         data_path: Path | None = None,
         parquet_flag=False,
         postgres_flag=False,
@@ -67,7 +67,7 @@ class DataPreparation:
         metrics_flag=False,
         update_flag=False,
     ):
-        self.download_path = download_path
+        # self.download_path = download_path
         if data_path:
             self.data_path = data_path
         else:
@@ -98,7 +98,7 @@ class DataPreparation:
 
     def load_meta_parameters(self):
         self.meta_parameters = load_metadata_per_type(
-            'parameters', self.data_path, *ARGS_LOAD_META_PARAMETERS
+            'parameters', *ARGS_LOAD_META_PARAMETERS
         )
         return self.meta_parameters
 
@@ -106,13 +106,13 @@ class DataPreparation:
 
     def load_meta_datainventory(self):
         self.meta_datainventory = load_metadata_per_type(
-            'datainventory', self.data_path, *ARGS_LOAD_META_DATAINVENTORY
+            'datainventory', *ARGS_LOAD_META_DATAINVENTORY
         )
         return self.meta_datainventory
 
     def load_meta_stations(self):
         self.meta_stations = load_metadata_per_type(
-            'stations', self.data_path, *ARGS_LOAD_META_STATIONS
+            'stations', *ARGS_LOAD_META_STATIONS
         )
         return self.meta_stations
 
@@ -152,13 +152,13 @@ class DataPreparation:
         self.save_meta_stations()
         self.save_meta_datainventory()
 
-    def load_weather_data(self):
+    def load_weather_data(self, down_path):
         if not hasattr(self, 'weather_schema_dict'):
             self.weather_schema_dict = self.create_weather_schema_dict()
         self.weather_data: pl.LazyFrame = load_weather(
             self.meta_stations,
             schema_dict_lazyframe=self.weather_schema_dict,
-            down_path=self.download_path,
+            down_path=down_path,
             update_data=self.update_flag,
         )
         logger.debug(f'weather_data generated as {type(self.weather_data)}')
@@ -181,12 +181,24 @@ class DataPreparation:
                 frame_metrics=self.metrics, data_path=self.data_path
             )
 
+    def prepare_data(self):
+        self.load_metadata()
+        self.save_metadata()
+        if self.weather_flag:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                down_path: Path = Path(tmpdir)
+                logger.info(f'Download path: {down_path}')
+                self.load_weather_data(down_path)
+            self.save_weather_data()
+        if self.metrics_flag:
+            self.load_metrics()
+            self.save_metrics()
+
 
 def load_metadata_to_lazyframe(
     meta_type: str,
     meta_schema: Mapping[str, type[pl.DataType]],
     meta_cols_to_keep: Sequence[str],
-    data_path: Path,
 ) -> pl.LazyFrame:
     """Load metadata from a Parquet file.
 
@@ -218,7 +230,6 @@ def load_metadata_to_lazyframe(
             for file_path in META_FILE_PATH_DICT[meta_type]
         ]
     ).lazy()
-    # frame_meta.sink_parquet(Path(data_path, f'meta_{meta_type}.parquet'))
     return frame_meta
 
 
@@ -228,9 +239,11 @@ def save_metadata_to_parquet(frame_meta: pl.LazyFrame, data_path: Path, meta_typ
     logger.debug(f'{out_path} written to parquet')
 
 
-def load_metadata_per_type(meta_type: str, data_path, meta_schema, meta_cols_to_keep):
+def load_metadata_per_type(meta_type: str, meta_schema, meta_cols_to_keep):
     metadata = load_metadata_to_lazyframe(
-        meta_type, meta_schema, meta_cols_to_keep, data_path
+        meta_type,
+        meta_schema,
+        meta_cols_to_keep,
     )
     logger.debug(f'meta_{meta_type} generated as {type(metadata)}')
     return metadata
@@ -669,28 +682,16 @@ def main(
         logger.info('Metrics generation activated')
     if update:
         logger.info('Update of existing data activated')
-    with tempfile.TemporaryDirectory() as tmpdir:
-        down_path: Path = Path(tmpdir)
-        logger.info(f'Download path: {down_path}')
-        new_data = DataPreparation(
-            download_path=down_path,
-            data_path=data_path,
-            parquet_flag=parquet,
-            postgres_flag=False,
-            weather_flag=weather,
-            metrics_flag=metrics,
-            update_flag=update,
-        )
-        new_data.load_metadata()
-        new_data.save_metadata()
-        if weather:
-            new_data.load_weather_data()
-            if parquet:
-                new_data.save_weather_data()
-        if metrics:
-            new_data.load_metrics()
-            if parquet:
-                new_data.save_metrics()
+
+    new_data = DataPreparation(
+        data_path=data_path,
+        parquet_flag=parquet,
+        postgres_flag=False,
+        weather_flag=weather,
+        metrics_flag=metrics,
+        update_flag=update,
+    )
+    new_data.prepare_data()
     logger.info('Files successfully downloaded')
 
 
