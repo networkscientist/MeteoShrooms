@@ -56,6 +56,16 @@ EXPR_METRICS_AGGREGATION_TYPE_WHEN_THEN: pl.Expr = (
 app = typer.Typer()
 
 
+def _set_loglevel(verbose_debug: bool, verbose_info: bool, verbose_warn: bool) -> None:
+    if verbose_warn:
+        logger.setLevel(logging.WARNING)
+    if verbose_info:
+        logger.setLevel(logging.INFO)
+    if verbose_debug:
+        logger.setLevel(logging.DEBUG)
+    return None
+
+
 class DataPreparation:
     def __init__(
         self,
@@ -671,12 +681,7 @@ def main(
     ] = False,
     data_path: Annotated[Path | None, typer.Argument()] = None,
 ):
-    if verbose_warn:
-        logger.setLevel(logging.WARNING)
-    if verbose_info:
-        logger.setLevel(logging.INFO)
-    if verbose_debug:
-        logger.setLevel(logging.DEBUG)
+    _set_loglevel(verbose_debug, verbose_info, verbose_warn)
     logger.debug('Logger created')
     if metrics:
         logger.info('Metrics generation activated')
