@@ -61,6 +61,10 @@ class DataPreparation:
         self,
         download_path,
         data_path: Path | None = None,
+        parquet_flag=False,
+        postgres_flag=False,
+        weather_flag=False,
+        metrics_flag=False,
         update_flag=False,
     ):
         self.download_path = download_path
@@ -68,7 +72,15 @@ class DataPreparation:
             self.data_path = data_path
         else:
             self.data_path = DATA_PATH
+        self.parquet_flag = parquet_flag
+        self.postgres_flag = postgres_flag
+        self.weather_flag = weather_flag
+        self.metrics_flag = metrics_flag
         self.update_flag = update_flag
+        if self.metrics_flag:
+            self.metrics = pl.LazyFrame()
+        if True not in {self.parquet_flag, self.postgres_flag}:
+            raise ValueError('You must set an output type')
 
     def create_weather_schema_dict(self) -> dict[Any, type[pl.DataType]]:
         self.weather_schema_dict = {
@@ -111,34 +123,34 @@ class DataPreparation:
             self.load_meta_stations(),
         )
 
-    def save_meta_parameters(self, save_type):
-        if save_type == 'parquet':
+    def save_meta_parameters(self):
+        if self.parquet_flag:
             save_metadata_to_parquet(
                 frame_meta=self.meta_parameters,
                 data_path=self.data_path,
                 meta_type='parameters',
             )
 
-    def save_meta_stations(self, save_type):
-        if save_type == 'parquet':
+    def save_meta_stations(self):
+        if self.parquet_flag:
             save_metadata_to_parquet(
                 frame_meta=self.meta_stations,
                 data_path=self.data_path,
                 meta_type='stations',
             )
 
-    def save_meta_datainventory(self, save_type):
-        if save_type == 'parquet':
+    def save_meta_datainventory(self):
+        if self.parquet_flag:
             save_metadata_to_parquet(
                 frame_meta=self.meta_datainventory,
                 data_path=self.data_path,
                 meta_type='datainventory',
             )
 
-    def save_metadata(self, save_type):
-        self.save_meta_parameters(save_type)
-        self.save_meta_stations(save_type)
-        self.save_meta_datainventory(save_type)
+    def save_metadata(self):
+        self.save_meta_parameters()
+        self.save_meta_stations()
+        self.save_meta_datainventory()
 
     def load_weather_data(self):
         if not hasattr(self, 'weather_schema_dict'):
@@ -152,8 +164,8 @@ class DataPreparation:
         logger.debug(f'weather_data generated as {type(self.weather_data)}')
         return self.weather_data
 
-    def save_weather_data(self, save_type):
-        if save_type == 'parquet':
+    def save_weather_data(self):
+        if self.parquet_flag:
             save_weather_data_to_parquet(
                 frame_weather=self.weather_data, data_path=self.data_path
             )
@@ -161,10 +173,13 @@ class DataPreparation:
     def load_metrics(self):
         self.metrics: pl.LazyFrame = create_metrics(self.weather_data, TIME_PERIODS)
         logger.debug(f'metrics generated as {type(self.metrics)}')
-        metrics_file_path: Path = Path(self.data_path, 'metrics.parquet')
-        self.metrics.sink_parquet(metrics_file_path, **SINK_PARQUET_KWARGS)
-        logger.debug(f'metrics written to {metrics_file_path}')
         return self.metrics
+
+    def save_metrics(self):
+        if self.parquet_flag:
+            save_metrics_to_parquet(
+                frame_metrics=self.metrics, data_path=self.data_path
+            )
 
 
 def load_metadata_to_lazyframe(
@@ -225,6 +240,12 @@ def save_weather_data_to_parquet(frame_weather: pl.LazyFrame, data_path: Path):
     weather_data_file_path: Path = Path(data_path, 'weather_data.parquet')
     frame_weather.sink_parquet(weather_data_file_path, **SINK_PARQUET_KWARGS)
     logger.debug(f'weather_data written to {weather_data_file_path}')
+
+
+def save_metrics_to_parquet(frame_metrics: pl.LazyFrame, data_path: Path):
+    metrics_file_path: Path = Path(data_path, 'metrics.parquet')
+    frame_metrics.sink_parquet(metrics_file_path, **SINK_PARQUET_KWARGS)
+    logger.debug(f'metrics written to {metrics_file_path}')
 
 
 def combine_urls_parts_to_string(
@@ -652,17 +673,24 @@ def main(
         down_path: Path = Path(tmpdir)
         logger.info(f'Download path: {down_path}')
         new_data = DataPreparation(
-            download_path=down_path, update_flag=update, data_path=data_path
+            download_path=down_path,
+            data_path=data_path,
+            parquet_flag=parquet,
+            postgres_flag=False,
+            weather_flag=weather,
+            metrics_flag=metrics,
+            update_flag=update,
         )
         new_data.load_metadata()
-        if parquet:
-            new_data.save_metadata('parquet')
+        new_data.save_metadata()
         if weather:
             new_data.load_weather_data()
             if parquet:
-                new_data.save_weather_data('parquet')
+                new_data.save_weather_data()
         if metrics:
             new_data.load_metrics()
+            if parquet:
+                new_data.save_metrics()
     logger.info('Files successfully downloaded')
 
 
