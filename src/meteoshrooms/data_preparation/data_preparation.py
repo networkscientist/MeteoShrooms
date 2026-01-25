@@ -467,7 +467,7 @@ def scan_csv_from_urls(
     return pl.scan_csv(
         tuple(Path(down_path, Path(url).name) for url in station_urls),
         **kwargs_lazyframe,
-    )
+    ).collect()
 
 
 def download_files(urls: Iterable[str], down_path: Path):
@@ -576,7 +576,7 @@ def filter_stations_to_series(stations: pl.DataFrame, station_type: str) -> pl.S
         Polars Series with station names
     """
     return (
-        stations.filter(pl.col('station_type_en') == station_type)
+        stations.filter(pl.col('station_type_en').str.contains(station_type))
         .select('station_abbr')
         .to_series()
         .str.to_lowercase()
