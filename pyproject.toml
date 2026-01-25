@@ -48,6 +48,12 @@ dev = [
     { include-group = 'lint' },
     "uv>=0.9.16",
 ]
+marimo = [
+    "altair>=6.0.0",
+    "marimo>=0.18.4",
+    "python-lsp-server>=1.14.0",
+    "ty>=0.0.5",
+]
 [project.scripts]
 data_preparation = "meteoshrooms.data_preparation.data_preparation:app"
 [tool.setuptools.packages.find]
