@@ -1,15 +1,14 @@
 import logging
-from typing import Any
 
 import polars as pl
 import streamlit as st
 from plotly import express as px
 from plotly.graph_objs import Figure
 
-from meteoshrooms.dashboard.constants import WEATHER_SHORT_LABEL_DICT
-from meteoshrooms.dashboard.dashboard_utils import (
+from meteoshrooms.dashboard.dashboard_utils import create_scatter_map_kwargs
+from meteoshrooms.dashboard.dashboard_utils_streamlit import (
     META_STATIONS,
-    create_station_frame_for_map,
+    create_station_frame_for_map_for_streamlit,
     update_selection,
 )
 from meteoshrooms.dashboard.log import init_logging
@@ -37,32 +36,11 @@ def create_map_section(
 def draw_map(_metrics: pl.LazyFrame, param_short_code: str, time_period: int | None):
     if not time_period:
         time_period = 7
-    station_frame_for_map: pl.DataFrame = create_station_frame_for_map(
+    station_frame_for_map: pl.DataFrame = create_station_frame_for_map_for_streamlit(
         META_STATIONS, _metrics, time_period
     )
-    scatter_map_kwargs: dict[
-        str, str | dict[str, bool] | list[str | Any] | int | None
-    ] = {
-        'lat': 'station_coordinates_wgs84_lat',
-        'lon': 'station_coordinates_wgs84_lon',
-        'color': (WEATHER_SHORT_LABEL_DICT.get(param_short_code, 'Station Type')),
-        'hover_name': 'station_name',
-        'hover_data': {
-            'Station Type': False,
-            'station_coordinates_wgs84_lat': False,
-            'station_coordinates_wgs84_lon': False,
-            'Short Code': True,
-            'Altitude': True,
-        },
-        'color_continuous_scale': px.colors.cyclical.IceFire,
-        'size_max': 15,
-        'zoom': 6,
-        'map_style': 'carto-positron',
-        'title': (WEATHER_SHORT_LABEL_DICT.get(param_short_code, 'Stations')),
-        'subtitle': (
-            f'Over the last {time_period} days'
-            if param_short_code in WEATHER_SHORT_LABEL_DICT
-            else None
-        ),
-    }
-    return px.scatter_map(station_frame_for_map, **scatter_map_kwargs)
+
+    return px.scatter_map(
+        station_frame_for_map,
+        **create_scatter_map_kwargs(time_period, param_short_code),
+    )

@@ -4,17 +4,15 @@ from pathlib import Path
 from typing import Any
 
 import polars as pl
-import streamlit as st
+from plotly import express as px
 
 from meteoshrooms.constants import (
     DATA_PATH,
-    TIMEZONE_SWITZERLAND_STRING,
     parameter_description_extraction_pattern,
 )
 from meteoshrooms.dashboard.constants import (
     COLUMNS_FOR_MAP_FRAME,
     METRICS_STRINGS,
-    SIDEBAR_MAX_SELECTIONS,
     WEATHER_SHORT_LABEL_DICT,
 )
 from meteoshrooms.dashboard.log import init_logging
@@ -23,8 +21,7 @@ init_logging(__name__)
 root_logger: logging.Logger = logging.getLogger(__name__)
 
 
-@st.cache_data
-def load_metadata_to_frame(meta_type: str) -> pl.DataFrame:
+def load_metadata_to_frame(meta_type: str, data_path=DATA_PATH) -> pl.DataFrame:
     """Load metadata
 
     Returns
@@ -32,18 +29,25 @@ def load_metadata_to_frame(meta_type: str) -> pl.DataFrame:
         Metadata in Polars DataFrame
     """
     return pl.read_parquet(
-        Path(DATA_PATH, f'meta_{meta_type.lower()}.parquet')
+        Path(data_path, f'meta_{meta_type.lower()}.parquet')
     ).unique()
 
 
-@st.cache_data
-def collect_meta_params_to_dicts(metadata: pl.DataFrame) -> tuple[dict[str, Any], ...]:
+def create_metrics_names_dict(meta_params_df: pl.DataFrame) -> dict[str, str]:
+    return {m: create_meta_map(meta_params_df).get(m, '') for m in METRICS_STRINGS}
+
+
+def create_station_names(frame_with_stations: pl.LazyFrame) -> tuple[str, ...]:
     return tuple(
-        metadata.to_dicts(),
+        frame_with_stations.unique(subset=('station_name',))
+        .sort('station_name')
+        .select('station_name')
+        .collect()
+        .to_series()
+        .to_list()
     )
 
 
-@st.cache_data
 def create_meta_map(metadata: pl.DataFrame):
     meta_map: dict = {
         r['parameter_shortname']: (
@@ -62,30 +66,40 @@ def create_meta_map(metadata: pl.DataFrame):
     return meta_map
 
 
-def create_stations_options_selected(station_name_list) -> list:
-    return st.multiselect(
-        label='Stations',
-        options=station_name_list,
-        default='Airolo',
-        max_selections=SIDEBAR_MAX_SELECTIONS,
-        placeholder='Choose Station(s)',
-        key='stations_options_multiselect',
-    )
-
-
-@st.cache_data
-def create_station_names(_frame_with_stations: pl.LazyFrame) -> tuple[str, ...]:
+def collect_meta_params_to_dicts(metadata: pl.DataFrame) -> tuple[dict[str, Any], ...]:
     return tuple(
-        _frame_with_stations.unique(subset=('station_name',))
-        .sort('station_name')
-        .select('station_name')
-        .collect()
-        .to_series()
-        .to_list()
+        metadata.to_dicts(),
     )
 
 
-@st.cache_data
+def create_scatter_map_kwargs(
+    time_period, param_short_code
+) -> dict[str, str | dict[str, bool] | list[str | Any] | int | None]:
+    return {
+        'lat': 'station_coordinates_wgs84_lat',
+        'lon': 'station_coordinates_wgs84_lon',
+        'color': (WEATHER_SHORT_LABEL_DICT.get(param_short_code, 'Station Type')),
+        'hover_name': 'station_name',
+        'hover_data': {
+            'Station Type': False,
+            'station_coordinates_wgs84_lat': False,
+            'station_coordinates_wgs84_lon': False,
+            'Short Code': True,
+            'Altitude': True,
+        },
+        'color_continuous_scale': px.colors.cyclical.IceFire,
+        'size_max': 15,
+        'zoom': 6,
+        'map_style': 'carto-positron',
+        'title': (WEATHER_SHORT_LABEL_DICT.get(param_short_code, 'Stations')),
+        'subtitle': (
+            f'Over the last {time_period} days'
+            if param_short_code in WEATHER_SHORT_LABEL_DICT
+            else None
+        ),
+    }
+
+
 def create_station_frame_for_map(
     _frame_with_stations: pl.LazyFrame, _metrics: pl.LazyFrame, time_period: int
 ) -> pl.DataFrame:
@@ -107,70 +121,3 @@ def create_station_frame_for_map(
         .rename(WEATHER_SHORT_LABEL_DICT)
         .collect()
     )
-
-
-@st.cache_data
-def load_weather_data() -> pl.DataFrame:
-    return pl.read_parquet(Path(DATA_PATH, 'weather_data.parquet')).with_columns(
-        pl.col('reference_timestamp').dt.replace_time_zone(
-            TIMEZONE_SWITZERLAND_STRING, non_existent='null'
-        )
-    )
-
-
-@st.cache_data
-def load_metric_data() -> pl.DataFrame:
-    return pl.read_parquet(Path(DATA_PATH, 'metrics.parquet')).pivot(
-        'parameter',
-        index=('station_abbr', 'station_name', 'time_period'),
-        values='value',
-    )
-
-
-@st.cache_data
-def create_metrics_names_dict(meta_params_df: pl.DataFrame) -> dict[str, str]:
-    return {m: create_meta_map(meta_params_df).get(m, '') for m in METRICS_STRINGS}
-
-
-META_PARAMETERS: pl.DataFrame = load_metadata_to_frame('parameters')
-
-META_STATIONS: pl.LazyFrame = load_metadata_to_frame('stations').lazy()
-
-METRICS_NAMES_DICT: dict[str, str] = create_metrics_names_dict(META_PARAMETERS)
-WEATHER_COLUMN_NAMES_DICT: dict[str, str] = dict(
-    {'reference_timestamp': 'Time', 'station_name': 'Station'} | METRICS_NAMES_DICT
-)
-
-
-def update_selection():
-    try:
-        if len(st.session_state.stations_selected_map.selection.points) > 0:
-            new_selection = {
-                pt['hovertext']
-                for pt in st.session_state.stations_selected_map.selection.points
-            }
-            st.session_state.stations_selected_last_time = (
-                st.session_state.stations_options_multiselect
-            )
-            root_logger.debug(len(st.session_state.stations_options_multiselect))
-            if len(st.session_state.stations_options_multiselect) == 5:
-                raise IndexError(
-                    'You have already selected the maximum number of stations (5).'
-                )
-            if any(
-                pt not in st.session_state.stations_options_multiselect
-                for pt in new_selection
-            ):
-                root_logger.debug(new_selection)
-                st.session_state.stations_options_multiselect = sorted(
-                    st.session_state.stations_options_multiselect
-                    + list(
-                        new_selection.difference(
-                            set(st.session_state.stations_options_multiselect)
-                        )
-                    )
-                )[0:5]
-        else:  # Pass for the time being
-            pass
-    except Exception as e:
-        st.error(e)

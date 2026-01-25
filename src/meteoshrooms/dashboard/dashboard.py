@@ -8,21 +8,22 @@ from meteoshrooms.dashboard.constants import (
     METRICS_STRINGS,
     NUM_DAYS_DELTA,
     NUM_DAYS_VAL,
+    TIME_PERIOD_INITAL_VALUE,
     TIME_PERIODS,
 )
 from meteoshrooms.dashboard.dashboard_map import create_map_section
-from meteoshrooms.dashboard.dashboard_timeseries_chart import create_area_chart
-from meteoshrooms.dashboard.dashboard_utils import (
-    create_station_names,
+from meteoshrooms.dashboard.dashboard_utils_streamlit import (
+    create_area_chart,
+    create_station_names_to_streamlit,
     create_stations_options_selected,
-    load_metric_data,
-    load_weather_data,
+    load_metric_data_to_streamlit,
+    load_weather_data_to_streamlit,
 )
 from meteoshrooms.dashboard.log import init_logging
 from meteoshrooms.dashboard.ux_metrics import (
-    create_metric_section,
     create_metrics_expander_info,
 )
+from meteoshrooms.dashboard.ux_metrics_streamlit import create_metric_section
 
 
 def main():
@@ -32,11 +33,11 @@ def main():
         st.session_state.stations_selected_last_time = {'Airolo'}
     st.set_page_config(layout='wide', initial_sidebar_state='expanded')
     root_logger.debug('Page config set')
-    df_weather: pl.LazyFrame = load_weather_data().lazy()
+    df_weather: pl.LazyFrame = load_weather_data_to_streamlit().lazy()
     root_logger.debug('Weather data LazyFrame loaded')
-    metrics: pl.LazyFrame = load_metric_data().lazy()
+    metrics: pl.LazyFrame = load_metric_data_to_streamlit().lazy()
     root_logger.debug('Metrics LazyFrame created')
-    station_name_list: tuple[str, ...] = create_station_names(metrics)
+    station_name_list: tuple[str, ...] = create_station_names_to_streamlit(metrics)
     st.title('MeteoShrooms')
 
     with st.sidebar:
@@ -45,7 +46,7 @@ def main():
             station_name_list
         )
         time_period_selected: int | None = st.pills(
-            'Time Period', TIME_PERIODS.keys(), default=7
+            'Time Period', TIME_PERIODS.keys(), default=TIME_PERIOD_INITAL_VALUE
         )
         toggle_hide_map: bool = st.toggle('Hide Map')
 
