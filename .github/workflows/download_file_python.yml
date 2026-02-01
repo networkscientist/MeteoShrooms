@@ -32,7 +32,7 @@ jobs:
           python-version-file: "pyproject.toml"
 
       - name: "Install Project"
-        run: uv sync
+        run: uv sync --group async
 
       - name: "Data Preparation with Python"
         run: uv run "src/meteoshrooms/data_preparation/data_preparation.py" -m -w -p -vv

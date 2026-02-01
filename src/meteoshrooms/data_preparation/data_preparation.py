@@ -1,7 +1,19 @@
 """Prepare data for the MeteoShrooms dashboard"""
 
+try:
+    import asyncio
+
+    import aiofiles
+    import aiohttp
+    from tqdm.asyncio import tqdm_asyncio
+
+    FUNC_ASYNC = True
+except ModuleNotFoundError:
+    FUNC_ASYNC = False
+
 import logging
 import tempfile
+import time
 from collections.abc import Sequence
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -35,6 +47,8 @@ from meteoshrooms.data_preparation.constants import (
     URL_GEO_ADMIN_BASE,
     URL_GEO_ADMIN_STATION_TYPE_BASE,
 )
+
+start = time.time()
 
 logger: logging.Logger = logging.getLogger(__name__)
 console_handler = logging.StreamHandler()
@@ -330,12 +344,24 @@ def load_weather(
         stations, station_type='Automatic weather stations'
     )
     # Download most recent CSV files for both station types
-    download_files(
-        generate_file_path_series(
-            station_series_precipitation, station_series_weather, timeframe='now'
-        ),
-        down_path,
-    )
+    if FUNC_ASYNC:
+        asyncio.run(
+            download_files_parallel(
+                generate_file_path_series(
+                    station_series_precipitation,
+                    station_series_weather,
+                    timeframe='now',
+                ),
+                down_path,
+            )
+        )
+    else:
+        download_files(
+            generate_file_path_series(
+                station_series_precipitation, station_series_weather, timeframe='now'
+            ),
+            down_path,
+        )
     # If data only needs to be updated, do that
     if update_data:
         return update_weather_data(
@@ -353,12 +379,24 @@ def load_weather(
         generate_download_urls(station_series_precipitation, 'rainfall', period)
         for period in TIMEFRAME_STRINGS
     )
-    download_files(
-        generate_file_path_series(
-            station_series_precipitation, station_series_weather, timeframe='recent'
-        ),
-        down_path,
-    )
+    if FUNC_ASYNC:
+        asyncio.run(
+            download_files_parallel(
+                generate_file_path_series(
+                    station_series_precipitation,
+                    station_series_weather,
+                    timeframe='recent',
+                ),
+                down_path,
+            )
+        )
+    else:
+        download_files(
+            generate_file_path_series(
+                station_series_precipitation, station_series_weather, timeframe='recent'
+            ),
+            down_path,
+        )
     # download_files(
     #     pl.concat(
     #         generate_download_urls(station_series, station_type, 'recent')
@@ -539,6 +577,42 @@ def download_files(urls: Iterable[str], down_path: Path):
                 print('Exception in download_url():', e)
 
 
+async def download_files_parallel(urls: Iterable[str], down_path: Path):
+    async def download_file(session: aiohttp.ClientSession, url: str):
+        try:
+            async with session.get(url) as response:
+                # Raise an exception for bad HTTP responses
+                response.raise_for_status()
+
+                # Determine the filename from the URL
+                filename = Path(url).name
+                file_path = Path(down_path, filename)
+
+                # Write the file content
+                async with aiofiles.open(file_path, 'wb') as f:
+                    await f.write(await response.read())
+
+                return filename
+        except Exception as e:
+            print(f'Exception downloading {url}: {e}')
+            return None
+
+    # Create a connector with some reasonable limits
+    connector = aiohttp.TCPConnector(limit=10)  # Limit concurrent connections
+
+    async with aiohttp.ClientSession(connector=connector) as session:
+        # Create tasks for all downloads
+        tasks = [download_file(session, url) for url in urls]
+
+        # Use tqdm for progress tracking
+        results = await tqdm_asyncio.gather(*tasks, desc='Downloading...', unit='file')
+
+        # Filter out None results (failed downloads)
+        successful_downloads = [r for r in results if r is not None]
+
+        return successful_downloads
+
+
 def create_rainfall_weather_dataframes(
     down_path: Path,
     station_urls,
@@ -698,6 +772,7 @@ def main(
     )
     new_data.prepare_data()
     logger.info('Files successfully downloaded')
+    logger.info(f'Took {time.time() - start}s')
 
 
 if __name__ == '__main__':
