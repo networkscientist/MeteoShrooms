@@ -1,20 +1,22 @@
 name: "Publish to TestPyPi"
 
 on:
-  push:
-    branches:
-      [ main ]
-    tags:
-      - '**'
-    paths-ignore:
-      - 'data/**'
-  pull_request:
-    branches:
-      [ main ]
-    tags:
-      - '**'
-    paths-ignore:
-      - 'data/**'
+  workflow_dispatch:
+
+#  push:
+#    branches:
+#      [ main ]
+#    tags:
+#      - '**'
+#    paths-ignore:
+#      - 'data/**'
+#  pull_request:
+#    branches:
+#      [ main ]
+#    tags:
+#      - '**'
+#    paths-ignore:
+#      - 'data/**'
 
 jobs:
   python-setup:

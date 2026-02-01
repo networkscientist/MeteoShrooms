@@ -2,8 +2,6 @@ name: Data Preparation with Python (from testpypi)
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "43 * * * *"
 
 jobs:
   python-setup:

@@ -1,16 +1,16 @@
 name: "Publish to PyPi"
 
 on:
-  push:
-    branches:
-      [ main ]
-    tags:
-      - '**'
-  pull_request:
-    branches:
-      [ main ]
-    tags:
-      - '**'
+  #  push:
+  #    branches:
+  #      [ main ]
+  #    tags:
+  #      - '**'
+  #  pull_request:
+  #    branches:
+  #      [ main ]
+  #    tags:
+  #      - '**'
   workflow_dispatch:
 
 jobs:
