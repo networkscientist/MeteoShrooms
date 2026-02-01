@@ -54,6 +54,11 @@ marimo = [
     "python-lsp-server>=1.14.0",
     "ty>=0.0.5",
 ]
+async = [
+    "aiofiles>=25.1.0",
+    "aiohttp>=3.13.3",
+    "tqdm>=4.67.2",
+]
 [project.scripts]
 data_preparation = "meteoshrooms.data_preparation.data_preparation:app"
 [tool.setuptools.packages.find]
