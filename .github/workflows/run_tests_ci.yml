@@ -17,7 +17,7 @@ on:
   #      - '**.svg'
   pull_request:
     branches:
-      [ main ]
+      [ main, test ]
     paths-ignore:
       - '.gitattributes'
       - '.github/workflows/**'
