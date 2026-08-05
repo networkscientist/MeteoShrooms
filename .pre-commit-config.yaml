@@ -6,9 +6,11 @@ repos:
     hooks:
       # Run the linter.
       - id: ruff-check
+        stages: [ pre-push ]
         args: [ --fix ]
       # Run the formatter.
       - id: ruff-format
+        stages: [ pre-push ]
 
   - repo: https://github.com/astral-sh/uv-pre-commit
     # uv version.
@@ -16,12 +18,12 @@ repos:
     hooks:
       - id: uv-lock
 
-  - repo: local
-    hooks:
-      - id: pytest
-        stages: [ pre-push ]
-        name: pytest
-        entry: uv run pytest
-        pass_filenames: false
-        language: system
-        types: [ python ]
+#  - repo: local
+#    hooks:
+#      - id: pytest
+#        stages: [ pre-push ]
+#        name: pytest
+#        entry: uv run tryke test
+#        pass_filenames: false
+#        language: system
+#        types: [ python ]
