@@ -8,7 +8,18 @@ import polars as pl
 from tryke import Depends, describe, expect, fixture, test
 
 from meteoshrooms.data_preparation import data_preparation
-from meteoshrooms.data_preparation.data_preparation import DataPreparation
+from meteoshrooms.data_preparation.data_preparation import (
+    DataPreparation,
+    check_generate_download_urls_arguments_or_raise_error,
+    combine_urls_parts_to_string,
+    create_kwargs_lazyframe,
+    expr_filter_column_timedelta,
+    filter_stations_to_series,
+    filter_unique_station_names,
+    generate_download_urls,
+    generate_file_path_series,
+    save_metadata_to_parquet,
+)
 
 
 @fixture(per='scope')
@@ -23,12 +34,21 @@ def default_data_path() -> Path:
     return Path(__file__).resolve().parents[1].joinpath('data')
 
 
+@fixture(per='scope')
+def station_abbrs_precipitation() -> tuple[str, ...]:
+    return 'ABO', 'AEG', 'AIG'
+
+
 @fixture
-def mock_meta_stations() -> pl.LazyFrame:
+def mock_meta_stations(
+    station_abbrs_precipitation: Annotated[
+        tuple[str, ...], Depends(station_abbrs_precipitation)
+    ],
+) -> pl.LazyFrame:
     """Mock station metadata LazyFrame"""
     return pl.LazyFrame(
         {
-            'station_abbr': ('airo', 'bern', 'zur'),
+            'station_abbr': station_abbrs_precipitation,
             'station_name': ('Airolo', 'Bern', 'Zurich'),
             'station_type_en': (
                 'Automatic weather stations',
@@ -98,8 +118,12 @@ def data_preparation_instance_with_metrics_flag(
 
 
 @fixture(per='scope')
-def station_series() -> pl.Series:
-    return pl.Series(('airo', 'bern'))
+def station_series(
+    station_abbrs_precipitation: Annotated[
+        tuple[str, ...], Depends(station_abbrs_precipitation)
+    ],
+) -> pl.Series:
+    return pl.Series(station_abbrs_precipitation)
 
 
 with describe('DataPreparation Class Initialization'):
@@ -187,11 +211,11 @@ with describe('generate_download_urls'):
                 data_preparation, 'URL_GEO_ADMIN_STATION_TYPE_BASE', 'ch.test'
             ),
         ):
-            urls = data_preparation.generate_download_urls(
+            urls = generate_download_urls(
                 station_series, 'rainfall', 'now'
             )
 
-            expect(len(urls)).to_equal(2)
+            expect(len(urls)).to_equal(3)
 
     @test
     def test_generate_urls_for_weather(
@@ -205,11 +229,11 @@ with describe('generate_download_urls'):
                 data_preparation, 'URL_GEO_ADMIN_STATION_TYPE_BASE', 'ch.test'
             ),
         ):
-            urls = data_preparation.generate_download_urls(
+            urls = generate_download_urls(
                 station_series, 'weather', 'now'
             )
 
-            expect(len(urls)).to_equal(2)
+            expect(len(urls)).to_equal(3)
 
     @test
     def test_generate_urls_invalid_timeframe_raises(
@@ -218,7 +242,7 @@ with describe('generate_download_urls'):
         """Test invalid timeframe raises ValueError"""
 
         expect(
-            lambda: data_preparation.generate_download_urls(
+            lambda: generate_download_urls(
                 station_series, 'weather', 'invalid'
             )
         ).to_raise(ValueError)
@@ -230,7 +254,7 @@ with describe('generate_download_urls'):
         """Test invalid station type raises TypeError"""
 
         expect(
-            lambda: data_preparation.generate_download_urls(station_series, 123, 'now')
+            lambda: generate_download_urls(station_series, 123, 'now')
         ).to_raise(TypeError)
 
 
@@ -242,12 +266,12 @@ with describe('filter_stations_to_series'):
     ):
         """Test filtering rainfall stations returns correct series"""
         df = mock_meta_stations.collect()
-        result = data_preparation.filter_stations_to_series(
+        result = filter_stations_to_series(
             df, 'Automatic precipitation stations'
         )
 
         expect(len(result)).to_equal(1)
-        expect(result[0]).to_equal('zur')  # Lowercase
+        expect(result[0]).to_equal('aig')  # Lowercase
 
     @test
     def test_filter_weather_stations(
@@ -255,13 +279,13 @@ with describe('filter_stations_to_series'):
     ):
         """Test filtering weather stations returns correct series"""
         df = mock_meta_stations.collect()
-        result = data_preparation.filter_stations_to_series(
+        result = filter_stations_to_series(
             df, 'Automatic weather stations'
         )
 
         expect(len(result)).to_equal(2)
-        expect(result[0]).to_equal('airo')
-        expect(result[1]).to_equal('bern')
+        expect(result[0]).to_equal('abo')
+        expect(result[1]).to_equal('aeg')
 
 
 with describe('expr_filter_column_timedelta'):
@@ -270,7 +294,7 @@ with describe('expr_filter_column_timedelta'):
     def test_create_time_filter_expression():
         """Test that time filter expression is created correctly"""
         delta_days = 7
-        expr = data_preparation.expr_filter_column_timedelta('timestamp', delta_days)
+        expr = expr_filter_column_timedelta('timestamp', delta_days)
 
         expect(str(expr)).to_contain('timestamp')
 
@@ -281,7 +305,7 @@ with describe('create_kwargs_lazyframe'):
     def test_create_kwargs_returns_expected_structure():
         """Test kwargs dictionary has expected keys"""
         schema = {'col1': pl.String, 'col2': pl.Float32}
-        kwargs = data_preparation.create_kwargs_lazyframe(schema)
+        kwargs = create_kwargs_lazyframe(schema)
 
         expect(kwargs).to_be_truthy()
         expect(kwargs['separator']).to_equal(';')
@@ -328,7 +352,7 @@ with describe('filter_unique_station_names'):
         mock_meta_stations: Annotated[pl.LazyFrame, Depends(mock_meta_stations)],
     ):
         """Test unique station filtering removes duplicates"""
-        result = data_preparation.filter_unique_station_names(mock_meta_stations)
+        result = filter_unique_station_names(mock_meta_stations)
 
         expect(isinstance(result, pl.LazyFrame)).to_be_truthy()
         expect(result.collect().shape[0]).to_be_less_than_or_equal(3)
@@ -339,7 +363,7 @@ with describe('check_generate_download_urls_arguments_or_raise_error'):
     @test
     def test_check_valid_arguments_pass():
         """Test valid arguments pass validation"""
-        result = data_preparation.check_generate_download_urls_arguments_or_raise_error(
+        result = check_generate_download_urls_arguments_or_raise_error(
             'weather', 'now'
         )
         expect(result).to_be_none()
@@ -348,7 +372,7 @@ with describe('check_generate_download_urls_arguments_or_raise_error'):
     def test_check_invalid_timeframe_raises():
         """Test invalid timeframe raises ValueError"""
         expect(
-            lambda: data_preparation.check_generate_download_urls_arguments_or_raise_error(
+            lambda: check_generate_download_urls_arguments_or_raise_error(
                 'weather', 'invalid'
             )
         ).to_raise(ValueError)
@@ -357,7 +381,7 @@ with describe('check_generate_download_urls_arguments_or_raise_error'):
     def test_check_invalid_station_type_raises():
         """Test invalid station type raises TypeError"""
         expect(
-            lambda: data_preparation.check_generate_download_urls_arguments_or_raise_error(
+            lambda: check_generate_download_urls_arguments_or_raise_error(
                 123, 'now'
             )
         ).to_raise(TypeError)
@@ -386,7 +410,7 @@ with describe('save_metadata_to_parquet'):
             patch('pathlib.Path.open', MagicMock()),
             patch('polars.LazyFrame.sink_parquet', MagicMock()) as mock_sink,
         ):
-            data_preparation.save_metadata_to_parquet(
+            save_metadata_to_parquet(
                 frame_meta=test_frame,
                 data_path=test_data_path,
                 meta_type='stations',
@@ -404,10 +428,21 @@ with describe('combine_urls_parts_to_string'):
         """Test URL combination produces expected format"""
         # station_series = pl.Series(['airo'])
 
-        result = data_preparation.combine_urls_parts_to_string(
+        result = combine_urls_parts_to_string(
             station_series, '-precip', 'now'
         )
 
-        expect(result.head(1).item()).to_contain('airo')
+        expect(result.head(1).str.to_lowercase().item()).to_contain('abo')
         expect(result.head(1).item()).to_contain('now')
         expect(result.head(1).item()).to_contain('ogd-smn')
+
+
+with describe('generate_file_path_series'):
+
+    @test
+    def test_is_path(station_series: Annotated[pl.Series, Depends(station_series)]):
+        expect(
+            generate_file_path_series(
+                station_series, station_series, 'now'
+            ).head(1).str.to_lowercase().item()
+        ).to_contain('abo')
