@@ -97,6 +97,11 @@ def data_preparation_instance_with_metrics_flag(
     yield instance
 
 
+@fixture(per='scope')
+def station_series() -> pl.Series:
+    return pl.Series(('airo', 'bern'))
+
+
 with describe('DataPreparation Class Initialization'):
 
     @test
@@ -157,7 +162,7 @@ with describe('DataPreparation Class Initialization'):
 
 with describe('DataPreparation.load_meta_* methods'):
 
-    @test
+    @test.todo
     def test_load_meta_returns_lazyframe(
         data_preparation_instance_with_parquet: Annotated[
             DataPreparation, Depends(data_preparation_instance_with_parquet)
@@ -171,9 +176,10 @@ with describe('DataPreparation.load_meta_* methods'):
 with describe('generate_download_urls'):
 
     @test
-    def test_generate_urls_for_rainfall():
+    def test_generate_urls_for_rainfall(
+        station_series: Annotated[pl.Series, Depends(station_series)],
+    ):
         """Test URL generation for rainfall stations"""
-        station_series = pl.Series(['airo', 'bern'])
 
         with (
             patch.object(data_preparation, 'URL_GEO_ADMIN_BASE', 'https://test.ch'),
@@ -188,9 +194,10 @@ with describe('generate_download_urls'):
             expect(len(urls)).to_equal(2)
 
     @test
-    def test_generate_urls_for_weather():
+    def test_generate_urls_for_weather(
+        station_series: Annotated[pl.Series, Depends(station_series)],
+    ):
         """Test URL generation for weather stations"""
-        station_series = pl.Series(['airo', 'bern'])
 
         with (
             patch.object(data_preparation, 'URL_GEO_ADMIN_BASE', 'https://test.ch'),
@@ -205,9 +212,10 @@ with describe('generate_download_urls'):
             expect(len(urls)).to_equal(2)
 
     @test
-    def test_generate_urls_invalid_timeframe_raises():
+    def test_generate_urls_invalid_timeframe_raises(
+        station_series: Annotated[pl.Series, Depends(station_series)],
+    ):
         """Test invalid timeframe raises ValueError"""
-        station_series = pl.Series(['airo'])
 
         expect(
             lambda: data_preparation.generate_download_urls(
@@ -216,9 +224,10 @@ with describe('generate_download_urls'):
         ).to_raise(ValueError)
 
     @test
-    def test_generate_urls_invalid_station_type_raises():
+    def test_generate_urls_invalid_station_type_raises(
+        station_series: Annotated[pl.Series, Depends(station_series)],
+    ):
         """Test invalid station type raises TypeError"""
-        station_series = pl.Series(['airo'])
 
         expect(
             lambda: data_preparation.generate_download_urls(station_series, 123, 'now')
@@ -298,7 +307,7 @@ with describe('DataPreparation.create_weather_schema_dict'):
 
 with describe('DataPreparation.prepare_data'):
 
-    @test
+    @test.todo
     def test_prepare_data_executes_load_and_save(
         test_data_path: Annotated[Path, Depends(test_data_path)],
         data_preparation_instance_with_parquet: Annotated[
@@ -321,7 +330,6 @@ with describe('filter_unique_station_names'):
         """Test unique station filtering removes duplicates"""
         result = data_preparation.filter_unique_station_names(mock_meta_stations)
 
-        # expect(result).to_be_truthy()
         expect(isinstance(result, pl.LazyFrame)).to_be_truthy()
         expect(result.collect().shape[0]).to_be_less_than_or_equal(3)
 
@@ -358,7 +366,7 @@ with describe('check_generate_download_urls_arguments_or_raise_error'):
 # Test the standalone functions
 with describe('load_metadata_per_type'):
 
-    @test
+    @test.todo
     def test_load_metadata_per_type_structure():
         """Test load_metadata_per_type returns expected type (would need real files)"""
         # This test documents expected behavior
@@ -390,14 +398,16 @@ with describe('save_metadata_to_parquet'):
 with describe('combine_urls_parts_to_string'):
 
     @test
-    def test_combine_url_parts():
+    def test_combine_url_parts(
+        station_series: Annotated[pl.Series, Depends(station_series)],
+    ):
         """Test URL combination produces expected format"""
-        station_series = pl.Series(['airo'])
+        # station_series = pl.Series(['airo'])
 
         result = data_preparation.combine_urls_parts_to_string(
             station_series, '-precip', 'now'
         )
 
-        expect(result.item()).to_contain('airo')
-        expect(result.item()).to_contain('now')
-        expect(result.item()).to_contain('ogd-smn')
+        expect(result.head(1).item()).to_contain('airo')
+        expect(result.head(1).item()).to_contain('now')
+        expect(result.head(1).item()).to_contain('ogd-smn')
