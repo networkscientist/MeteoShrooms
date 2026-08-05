@@ -24,10 +24,7 @@ ci = [
     "pre-commit>=4.5.0",
 ]
 test = [
-    "pytest>=9.0.2",
-    "pytest-cov>=7.0.0",
-    "pytest-emoji>=0.2.0",
-    "pytest-md>=0.2.0",
+    "tryke>=0.0.30",
 ]
 typing = [
     "mypy>=1.19.0",
